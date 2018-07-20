@@ -72,7 +72,7 @@ Assumes RESOLUTION^(+DIMENSIONS+) bits"
        for bits-read-so-far = 0 then (+ bits-read-so-far +chunk-size+)
        while (< bits-read-so-far expected-size)
 
-       for chunk = (read-byte stream nil nil)
+       for chunk = (read-byte stream)
        unless (zerop chunk)
        nconc (decode-full-coordinates chunk bits-read-so-far resolution))))
 
