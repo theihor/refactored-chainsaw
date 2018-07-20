@@ -1,6 +1,7 @@
 (defpackage :src/coordinates
   (:use :common-lisp :anaphora)
   (:export #:pos-diff
+           #:pos-eq
            #:mlen
            #:clen
            #:diff-kind
@@ -21,6 +22,9 @@
   "A coordinate difference d specifies the relative position of one coordinate to another and is written <dx, dy, dz>, where dx, dy, and dz are (positive or negative) integers. Adding distance d = <dx, dy, dz> to coordinate c = <x, y, z>, written c + d, yields the coordinate <x + dx, y + dy, z + dz>."
   (aops:each #'- c1 c2))
 
+(defun pos-eq (c1 c2)
+  (equalp c1 c2))
+
 (defun mlen (diff)
   "The Manhattan length (or L1 norm) of a coordinate difference d = <dx, dy, dz> is written mlen(d) and defined as |dx| + |dy| + |dz| (the sum of the absolute values of dx, dy, and dz). The Manhattan length of a coordinate difference is always a non-negative integer."
   (reduce #'+ (aops:each #'abs diff)))
@@ -28,6 +32,10 @@
 (defun clen (diff)
   "The Chessboard length (or Chebyshev distance or L∞ norm) of a coordinate difference d = <dx, dy, dz> is written clen(d) and defined as max(|dx|, |dy|, |dz|) (the maximum of the absolute values of dx, dy, and dz). The Chessboard length of a coordinate difference is always a non-negative integer."
   (reduce #'max (aops:each #'abs diff)))
+
+(defun adjacent? (c1 c2)
+  (let ((d (pos-diff c1 c2)))
+    (= (mlen d) 1)))
 
 (defun diff-linear? (diff)
   (let ((linear nil))

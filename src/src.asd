@@ -3,7 +3,8 @@
     :defsystem-depends-on (:asdf-package-system)
     :pathname #p"./"
     :depends-on (:src/main
-                 :src/coordinates)
+                 :src/coordinates
+                 :src/state)
     :in-order-to ((asdf:test-op (asdf:load-op :src/test/test)))
     :perform (asdf:test-op
               (o c)
