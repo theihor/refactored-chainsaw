@@ -44,12 +44,19 @@
 
 ;; (ql:quickload 'cl-heap)
 
+(ql:quickload 'let-plus)
+(ql:quickload 'optima)
+
 (in-package :cl-user)
 
 (asdf:initialize-source-registry '(:source-registry
                                    :inherit-configuration
                                    (:directory :here)
-                                   (:directory (:here "src/"))))
+                                   (:directory (:here "src/"))
+                                   (:directory (:here "array-operations/"))))
+
+;; https://github.com/bendudson/array-operations
+(asdf:load-system :array-operations)
 
 (asdf:compile-system :src)
 (asdf:load-system :src)
