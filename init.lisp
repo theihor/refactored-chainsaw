@@ -24,7 +24,7 @@
 ;; (ql:quickload 'cl-geometry)
 ;; (ql:quickload 'smug)
 (ql:quickload 'anaphora)
-;; (ql:quickload 'cl-fad)
+(ql:quickload 'cl-fad)
 ;; (ql:quickload 'cl-cairo2)
 ;; (ql:quickload 'cl-containers)
 
