@@ -1,5 +1,9 @@
 (uiop:define-package :src/model
-    (:use :common-lisp))
+    (:use :common-lisp)
+  (:export
+   #:read-model
+   #:read-model-from-file
+   #:read-models-in-dir))
 
 (in-package :src/model)
 
