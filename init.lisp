@@ -3,7 +3,7 @@
 (require 'sb-sprof)
 (require 'asdf)
 
-(load #P"ql-extensions.lisp")
+(load (format nil "~aql-extensions.lisp" (directory-namestring *load-pathname*)))
 
 ;; (ql:quickload 'fset)
 (ql:quickload 'lisp-unit)
