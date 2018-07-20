@@ -1,16 +1,15 @@
-(load #P"~/quicklisp/setup.lisp")
+(proclaim '(optimize (debug 3) (safety 3)))
 
 (require 'sb-sprof)
-
-(ql:quickload 'asdf)
-
-(proclaim '(optimize (debug 3) (safety 3)))
 (require 'asdf)
+
+(load (format nil "~aql-extensions.lisp" (directory-namestring *load-pathname*)))
 
 ;; (ql:quickload 'fset)
 (ql:quickload 'lisp-unit)
 ;; (ql:quickload 'cl-quickcheck)
 (ql:quickload 'alexandria)
+(ql:quickload (ql-git 'array-operations "https://github.com/bendudson/array-operations.git"))
 ;; (ql:quickload 'cl-graph)
 ;; (ql:quickload 'cl-heap)
 ;; (ql:quickload 'spatial-trees)
@@ -52,11 +51,7 @@
 (asdf:initialize-source-registry '(:source-registry
                                    :inherit-configuration
                                    (:directory :here)
-                                   (:directory (:here "src/"))
-                                   (:directory (:here "array-operations/"))))
-
-;; https://github.com/bendudson/array-operations
-(asdf:load-system :array-operations)
+                                   (:directory (:here "src/"))))
 
 (asdf:compile-system :src)
 (asdf:load-system :src)
