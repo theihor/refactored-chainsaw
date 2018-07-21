@@ -56,7 +56,7 @@
     t))
 
 (defun execute-one-step (state)
-  (with-slots (trace) state
+  (with-slots (trace energy harmonics r) state
     (let* ((bots (sort #'< (copy-list (state-bots state)) :key #'bot-bid))
            (commands (take (length bots) commands))
            (groups (progn (assert (= (length commands) (length bots)))
@@ -66,4 +66,15 @@
                  (loop :for (bot . cmd) :in group :append
                       (get-volatile-regions cmd bot)))))
       (check-volatile-regions volatile-region-groups)
+      (loop :for group :in groups :do
+           )
+      ;; global maintainance
+      (ecase harmonics
+        (:high (incf energy (* 30 r r r)))
+        (:low (incf energy (* 3 r r r))))
+      ;; bots maintainance
+      (incf energy (* 20 (length bots)))
+
+      
+      
       )))
