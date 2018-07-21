@@ -224,6 +224,13 @@
 (defclass smove (singleton)
   ((lld :accessor lld :initarg :lld)))
 
+(defmethod print-object ((m smove) s)
+  (with-coordinates (x y z) (lld m)
+    (cond ((/= x 0) (format s "#<SMOVE X ~A>" x))
+          ((/= y 0) (format s "#<SMOVE Y ~A>" y))
+          ((/= z 0) (format s "#<SMOVE Z ~A>" z))
+          (t (format s "#<MALFORMED SMOVE ~A>" (lld m))))))
+
 (defmethod encode-command ((cmd smove))
   (multiple-value-bind (a i) (encode-lld (lld cmd))
     (%bytes 2 (logior #b00000100 (ash a 4)) (logior #b00000000 i))))
@@ -254,6 +261,9 @@
 (defclass lmove (singleton)
   ((sld1 :accessor sld1 :initarg :sld1)
    (sld2 :accessor sld2 :initarg :sld2)))
+
+(defmethod print-object ((m lmove) s)
+  (format s "#<LMOVE ~A>" (pos-add (sld1 m) (sld2 m))))
 
 (defmethod encode-command ((cmd lmove))
   (multiple-value-bind (a1 i1) (encode-sld (sld1 cmd))
