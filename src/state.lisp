@@ -1,6 +1,7 @@
 (defpackage :src/state
   (:use :common-lisp
-        :src/coordinates))
+        :src/coordinates)
+  (:export :set-voxel-state))
 
 (in-package :src/state)
 
@@ -12,12 +13,12 @@
   "Returns a state of the voxel at coordinate `c' in matrix `m' as Full (1) or Void (0).
    `r' is the resolution of the matrix"
   (with-coordinates (x y z) c
-    (let ((i (+ x (* r y) (* r r z))))
+    (let ((i (+ z (* r y) (* r r x))))
       (aref m i))))
 
 (defun set-voxel-state (s c m r)
   (with-coordinates (x y z) c
-    (let ((i (+ x (* r y) (* r r z))))
+    (let ((i (+ z (* r y) (* r r x))))
       (setf (aref m i) s))))
 
 ;; TODO: implement check if M grounded

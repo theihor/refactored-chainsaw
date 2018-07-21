@@ -1,6 +1,7 @@
 (uiop:define-package :src/model
     (:use :common-lisp
-          :src/coordinates)
+          :src/coordinates
+          :src/state)
   (:export
    #:read-model
    #:read-model-from-file
@@ -58,17 +59,24 @@
      collect
        (decode-coordinate encoded-coordinate-index bits-read-so-far resolution)))
 
+(defun to-bit-array (full-coordinates resolution)
+  (let ((bit-array (make-array (* resolution resolution resolution) :element-type 'bit)))
+    (dolist (c full-coordinates bit-array)
+      (set-voxel-state 1 c bit-array resolution))))
+
 (defun read-full-coordinates (resolution stream)
   "Reads full coordinates from STREAM with given RESOLUTION.
 Assumes RESOLUTION^(+DIMENSIONS+) bits"
   (let ((expected-size (expt resolution +dimensions+)))
-    (loop
-       for bits-read-so-far = 0 then (+ bits-read-so-far +chunk-size+)
-       while (< bits-read-so-far expected-size)
+    (to-bit-array
+     (loop
+        for bits-read-so-far = 0 then (+ bits-read-so-far +chunk-size+)
+        while (< bits-read-so-far expected-size)
 
-       for chunk = (read-byte stream)
-       unless (zerop chunk)
-       nconc (decode-full-coordinates chunk bits-read-so-far resolution))))
+        for chunk = (read-byte stream)
+        unless (zerop chunk)
+        nconc (decode-full-coordinates chunk bits-read-so-far resolution))
+     resolution)))
 
 (defun read-resolution (stream)
   "Reads resolution for a model"
