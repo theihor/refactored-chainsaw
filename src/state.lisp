@@ -1,5 +1,6 @@
 (uiop:define-package :src/state
-  (:use :common-lisp
+    (:use :common-lisp
+          :anaphora
         :src/coordinates)
   (:export #:well-formed?
            #:voxel-state
@@ -19,6 +20,7 @@
            #:bot-trace
            #:bot-bid
            #:bot-seeds
+           #:read-nanobots
    ))
 
 (in-package :src/state)
@@ -87,3 +89,22 @@
                    (bot-seeds b)))
        ;; TODO: clarify 'The seeds of each active nanobot are disjoint.'
        ))
+
+(defun read-nanobot-coordinate (stream)
+  "Reads coordinate for nanobot from STREAM"
+  (make-point (read-byte stream)
+              (read-byte stream)
+              (read-byte stream)))
+
+(defun read-nanobot (stream)
+  "Reads a single nanobot from strea. Returns nil in case of EOF"
+  (awhen (read-byte stream nil nil)
+    (make-instance 'nanobot
+                   :bid it
+                   :pos (read-nanobot-coordinate stream))))
+
+(defun read-nanobots (stream)
+  "Reads nanobots for extended model"
+  (loop for nanobot = (read-nanobot stream)
+     while nanobot
+     collect nanobot))

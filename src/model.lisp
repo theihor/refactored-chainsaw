@@ -22,10 +22,13 @@
                 :initarg :coordinates
                 :initform nil)))
 
-(defclass extended-model (model)
-    ((nanobots :accessor ext-model-nanobots
-               :initarg :nanobots
-               :initform nil)))
+(defclass extended-model ()
+  ((model :accessor regular-model
+          :initarg :model
+          :initform nil)
+   (nanobots :accessor ext-model-nanobots
+             :initarg :nanobots
+             :initform nil)))
 
 
 (defun decode-coordinate (encoded-coordinate-index bits-read-so-far resolution)
@@ -94,6 +97,17 @@ Reads the first byte to determine the resolution. Then reads using 8 bit chunks.
 (defun read-model-from-file (filename)
   (with-open-file (stream filename :element-type '(unsigned-byte 8))
     (read-model stream)))
+
+
+(defun read-extended-model (stream)
+  "Reads a regular model, then reads nanobots"
+  (let ((ext-mdl (make-instance 'extended-model
+                                :model (read-model stream))))
+    (setf (ext-model-nanobots ext-mdl) (read-nanobots stream))))
+
+(defun read-nanobot-extended-model-from-file (filename)
+  (with-open-file (stream filename :element-type '(unsigned-byte 8))
+    (read-extended-model stream)))
 
 
 ;;; Tests
