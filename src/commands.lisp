@@ -17,6 +17,10 @@
    ;; command operations
    #:encode-commands
    #:decode-commands
+
+   #:get-volatile-regions
+   #:check-preconditions
+   #:execute
    ))
 
 (in-package :src/commands)
@@ -37,6 +41,9 @@
 
 (defgeneric check-preconditions (cmd state bots)
   (:documentation "Check if command is valid"))
+
+(defgeneric execute (cmd state bot)
+  (:documentation "Execute command and change states"))
 
 (defmacro %bytes (size &rest bytes)
   `(make-array ,size :element-type '(unsigned-byte 8) :initial-contents (list ,@bytes)))
