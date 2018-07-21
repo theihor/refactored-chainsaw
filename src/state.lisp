@@ -7,6 +7,7 @@
            #:set-voxel-state
            #:get-voxel
            #:fill-voxel
+           #:void-voxel
 
            #:state
            #:make-state
@@ -57,6 +58,9 @@
 
 (defun fill-voxel (state c)
   (set-voxel-state 1 c (state-matrix state) (state-r state)))
+
+(defun void-voxel (state c)
+  (set-voxel-state 0 c (state-matrix state) (state-r state)))
 
 (defun set-voxel-state (s c m r)
   (setf (aref m (matrix-index c r)) s))

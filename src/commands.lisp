@@ -97,6 +97,20 @@
         (dz (aref nd 2)))
     (+ (* (1+ dx) 9) (* (1+ dy) 3) (1+ dz))))
 
+(declaim (ftype (function (point) (values (unsigned-byte 8) (unsigned-byte 8) (unsigned-byte 8)))
+                encode-fd))
+(defun encode-fd (fd)
+  "A far coordinate difference fd = <dx, dy, dz> is encoded as a sequence of
+   three 8-bit (unsigned) integers with the values dx + 30, dy + 30, and dz +
+   30. Recall that at least one component of a far coordinate difference is
+   non-zero and each component of a far coordinate difference has a value
+   between -30 and 30. Return (values <byte-1> <byte-2> <byte-3>)."
+  (let ((dx (aref fd 0))
+        (dy (aref fd 1))
+        (dz (aref fd 2)))
+    (values (+ dx 30) (+ dy 30) (+ dz 30))))
+
+
 (declaim (ftype (function ((unsigned-byte 2) (unsigned-byte 4)) point) decode-sld))
 (defun decode-sld (a i)
   (ecase a
@@ -116,6 +130,12 @@
   (multiple-value-bind (dx1 r) (floor v 9)
     (multiple-value-bind (dy1 r) (floor r 3)
       (make-point (1- dx1) (1- dy1) (1- r)))))
+
+(declaim (ftype (function ((unsigned-byte 8) (unsigned-byte 8) (unsigned-byte 8)) point)
+                decode-fd))
+(defun decode-fd (b1 b2 b3)
+  (make-point (- b1 30) (- b2 30) (- b3 30)))
+
 
 (defun decode-commands (stream)
   "Return list of command objects read from stream."
@@ -144,13 +164,28 @@
                     ((= (logand b #b00000111) #b00000110) ; fusions
                      (let ((nd (ash (logand b #b11111000) -3)))
                        (make-instance 'fusions :nd (decode-nd nd))))
+                    ((= (logand b #b00000111) #b00000001) ; gfill
+                     (let ((nd (ash (logand b #b11111000) -3))
+                           (b1 (read-byte stream))
+                           (b2 (read-byte stream))
+                           (b3 (read-byte stream)))
+                       (make-instance 'gfill :nd (decode-nd nd) :fd (decode-fd b1 b2 b3))))
+                    ((= (logand b #b00000111) #b00000000) ; gvoid
+                     (let ((nd (ash (logand b #b11111000) -3))
+                           (b1 (read-byte stream))
+                           (b2 (read-byte stream))
+                           (b3 (read-byte stream)))
+                       (make-instance 'gvoid :nd (decode-nd nd) :fd (decode-fd b1 b2 b3))) )
                     ((= (logand b #b00000111) #b00000101) ; fission
                      (let ((m (read-byte stream))
                            (nd (ash (logand b #b11111000) -3)))
                        (make-instance 'fission :m m :nd (decode-nd nd))))
                     ((= (logand b #b00000111) #b00000011) ; fill
                      (let ((nd (ash (logand b #b11111000) -3)))
-                       (make-instance 'fill :nd (decode-nd nd)))))))
+                       (make-instance 'fill :nd (decode-nd nd))))
+                    ((= (logand b #b00000111) #b00000010) ; void
+                     (let ((nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'void :nd (decode-nd nd)))))))
 
 (defun read-trace-from-file (filename)
   (with-open-file (stream filename :element-type '(unsigned-byte 8))
@@ -375,6 +410,36 @@
               (+ (state-energy state) 6)))
     state))
 
+;; Void
+(defclass void (singleton)
+  ((nd :accessor nd :initarg :nd)))
+
+(defmethod encode-command ((cmd void))
+  (%bytes 1 (logior #b00000010 (ash (encode-nd (nd cmd)) 3))))
+
+(defmethod get-volatile-regions ((cmd fill) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (fpos (pos-add bpos (nd cmd))))
+    (list (make-region bpos fpos))))
+
+(defmethod check-preconditions ((cmd fill) (state state) bots)
+  (let* ((bpos (bot-pos (car bots)))
+         (fpos (pos-add bpos (nd cmd))))
+    (inside-field? fpos (state-r state))))
+
+(defmethod execute ((cmd fill) (state state) bot)
+  (let* ((bpos (bot-pos bot))
+         (fpos (pos-add bpos (nd cmd))))
+    (if (voxel-full? state fpos)
+        (progn
+          (void-voxel state fpos)
+          (setf (state-energy state)
+                (- (state-energy state) 12)))
+        (setf (state-energy state)
+              (+ (state-energy state) 3)))
+    state))
+
+
 ;;;------------------------------------------------------------------------------
 ;;; Group commands
 ;;;------------------------------------------------------------------------------
@@ -390,7 +455,7 @@
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fusionp))
-  (%bytes 1 (logior #b00000111 (encode-nd (nd cmd)))))
+  (%bytes 1 (logior #b00000111 (ash (encode-nd (nd cmd)) 3))))
 
 (defmethod get-volatile-regions ((cmd fusionp) (bot nanobot))
   (let ((bpos (bot-pos bot)))
@@ -415,7 +480,7 @@
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fusions))
-  (%bytes 1 (logior #b00000110 (encode-nd (nd cmd)))))
+  (%bytes 1 (logior #b00000110 (ash (encode-nd (nd cmd)) 3))))
 
 (defmethod get-volatile-regions ((cmd fusions) (bot nanobot))
   (let ((bpos (bot-pos bot)))
@@ -426,3 +491,46 @@
 
 (defmethod execute ((cmd fusions) (state state) bot)
   state)
+
+;; GFill
+(defclass gfill (group)
+  ((nd :accessor nd :initarg :nd)
+   (fd :accessor fd :initarg :fd)))
+
+(defmethod encode-command ((cmd gfill))
+  (multiple-value-bind (b1 b2 b3) (encode-fd (fd cmd))
+    (%bytes 4 (logior #b00000001 (ash (encode-nd (nd cmd)) 3)) b1 b2 b3)))
+
+(defmethod get-volatile-regions ((cmd gfill) (bot nanobot))
+  ;; TODO: implement
+  )
+
+(defmethod check-preconditions ((cmd gfill) (state state) bots)
+  ;; TODO: implement
+  )
+
+(defmethod execute ((cmd gfill) (state state) bot)
+  ;; TODO: implement
+  )
+
+;; GVoid
+(defclass gvoid (group)
+  ((nd :accessor nd :initarg :nd)
+   (fd :accessor fd :initarg :fd)))
+
+(defmethod encode-command ((cmd gvoid))
+  (multiple-value-bind (b1 b2 b3) (encode-fd (fd cmd))
+    (%bytes 4 (logior #b00000000 (ash (encode-nd (nd cmd)) 3)) b1 b2 b3)))
+
+(defmethod get-volatile-regions ((cmd gvoid) (bot nanobot))
+  ;; TODO: implement
+  )
+
+(defmethod check-preconditions ((cmd gvoid) (state state) bots)
+  ;; TODO: implement
+  )
+
+(defmethod execute ((cmd gvoid) (state state) bot)
+  ;; TODO: implement
+  )
+

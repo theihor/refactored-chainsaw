@@ -1,9 +1,7 @@
 (uiop:define-package :src/model
     (:use :common-lisp
-          :src/coordinates)
-  (:import-from :src/state
-                #:set-voxel-state
-                #:make-state)
+          :src/coordinates
+          :src/state)
   (:import-from :bit-smasher)
   (:export
    #:model-resolution
