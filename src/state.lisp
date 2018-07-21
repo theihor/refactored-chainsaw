@@ -2,6 +2,7 @@
   (:use :common-lisp
         :src/coordinates)
   (:export #:well-formed?
+           #:matrix-index
            #:voxel-state
            #:set-voxel-state
 
@@ -26,17 +27,19 @@
 ;; 1 <=> Full
 ;; 0 <=> Void
 
+(defun matrix-index (c r)
+  "Returns index of coordinate `c' in matrix bitarray"
+  (with-coordinates (x y z) c
+    (let ((i (+ (* r r x) (* r y) z)))
+      i)))
+
 (defun voxel-state (c m r)
   "Returns a state of the voxel at coordinate `c' in matrix `m' as Full (1) or Void (0).
    `r' is the resolution of the matrix"
-  (with-coordinates (x y z) c
-    (let ((i (+ x (* r y) (* r r z))))
-      (aref m i))))
+  (aref m (matrix-index c r)))
 
 (defun set-voxel-state (s c m r)
-  (with-coordinates (x y z) c
-    (let ((i (+ x (* r y) (* r r z))))
-      (setf (aref m i) s))))
+  (setf (aref m (matrix-index c r)) s))
 
 ;; TODO: implement check if M grounded
 (defun grounded? (m)
