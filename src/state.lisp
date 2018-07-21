@@ -34,22 +34,22 @@
 ;; 1 <=> Full
 ;; 0 <=> Void
 
-(defun matrix-index (c r)
+(defun matrix-index (c)
   "Returns index of coordinate `c' in matrix bitarray"
   (with-coordinates (x y z) c
-    (let ((i (+ z (* r y) (* r r x))))
+    (let ((i (+ z (* +dimensions+ y) (* +dimensions+ +dimensions+ x))))
       i)))
 
-(defun voxel-state (c m r)
+(defun voxel-state (c m)
   "Returns a state of the voxel at coordinate `c' in matrix `m' as Full (1) or Void (0).
    `r' is the resolution of the matrix"
-  (aref m (matrix-index c r)))
+  (aref m (matrix-index c)))
 
 (defun get-voxel (state c)
-  (voxel-state c (state-matrix state) (state-r state)))
+  (voxel-state c (state-matrix state)))
 
-(defun set-voxel-state (s c m r)
-  (setf (aref m (matrix-index c r)) s))
+(defun set-voxel-state (s c m)
+  (setf (aref m (matrix-index c)) s))
 
 (defun voxel-full? (state c)
   (= (get-voxel state c) 1))

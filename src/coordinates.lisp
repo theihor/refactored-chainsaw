@@ -15,7 +15,8 @@
            #:region-points
            #:with-coordinates
            #:inside-field?
-           #:mapc-adjacent))
+           #:mapc-adjacent
+           #:+dimensions+))
 
 (in-package :src/coordinates)
 
@@ -25,7 +26,8 @@
 
 ;; coordinate is an array of three elements #(x y z)
 
-(deftype point () `(simple-array (unsigned-byte 8) (3)))
+(defconstant +dimensions+ 3)
+(deftype point () `(simple-array (unsigned-byte 8) (+dimensions+)))
 
 (defun make-point (c1 c2 c3)
   (make-array 3 :element-type '(unsigned-byte 8) :initial-contents (list c1 c2 c3)))
