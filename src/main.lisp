@@ -6,7 +6,11 @@
         :src/model
         :src/tracer)
   (:import-from :src/commands
-                #:read-trace-from-file))
+                #:read-trace-from-file)
+  (:export
+   #:main
+   #:execute-trace-on-model
+   #:generate-trace-for-model))
 
 (in-package :src/main)
 
@@ -25,10 +29,16 @@
                             :trace trace)))
     (execute-state-trace state)))
 
-(defun load-and-execute (model-file trace-file)
+(defun execute-trace-on-model (model-file trace-file)
   (let ((model (read-model-from-file model-file))
         (trace (read-trace-from-file trace-file)))
     (execute-trace-on-model model trace)))
+
+(defun generate-trace-for-model (model-file tracer)
+  "Load model from `model-file' and generate the trace for it
+   using the specified `tracer'."
+  (let ((model (read-model-from-file model-file)))
+    (generate-trace tracer model)))
 
 (defun main ()
   (when sb-ext:*posix-argv*
