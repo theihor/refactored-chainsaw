@@ -1,5 +1,6 @@
 (uiop:define-package :src/model
-    (:use :common-lisp)
+    (:use :common-lisp
+          :src/coordinates)
   (:export
    #:read-model
    #:read-model-from-file
@@ -15,36 +16,24 @@
   ((resolution :accessor model-resolution
                :initarg :resolution
                :initform 1)
+   ;; coordinate is array of three elements, see src/coordinate.lisp
    (coordinates :accessor model-coordinates
                 :initarg :coordinates
                 :initform nil)))
 
-(defclass extended-model
+(defclass extended-model (model)
     ((nanobots :accessor ext-model-nanobots
                :initarg :nanobots
                :initform nil)))
-
-;;; TODO: integrate with COORDINATE (or similar) used in state
-(defclass coordinate ()
-  ((x :accessor coordinate-x
-      :initarg :x
-      :initform 0)
-   (y :accessor coordinate-y
-      :initarg :y
-      :initform 0)
-   (z :accessor coordinate-z
-      :initarg :z
-      :initform 0)))
 
 
 (defun decode-coordinate (encoded-coordinate-index bits-read-so-far resolution)
   (let ((stream-position
          (+ encoded-coordinate-index bits-read-so-far)))
     (let ((number-of-z-rows (floor stream-position resolution)))
-      (make-instance 'coordinate
-                     :z (mod stream-position resolution)
-                     :y (mod number-of-z-rows resolution)
-                     :x (floor number-of-z-rows resolution)))))
+      (point (floor number-of-z-rows resolution)
+             (mod number-of-z-rows resolution)
+             (mod stream-position resolution)))))
 
 ;;; Sizes in bits
 (defconstant +chunk-size+ 8)
