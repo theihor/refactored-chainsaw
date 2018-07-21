@@ -9,6 +9,8 @@
 
    #:make-pseudo-state-from-model
 
+   #:coordinates
+
    #:read-model
    #:read-model-from-file
    #:read-models-in-dir))

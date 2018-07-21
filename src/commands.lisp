@@ -250,7 +250,7 @@
              (* 2 (mlen (lld cmd)))))
     state))
 
-;;Lmove 
+;;Lmove
 (defclass lmove (singleton)
   ((sld1 :accessor sld1 :initarg :sld1)
    (sld2 :accessor sld2 :initarg :sld2)))
