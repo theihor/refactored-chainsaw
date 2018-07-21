@@ -1,6 +1,7 @@
 (defpackage :src/coordinates
   (:use :common-lisp :anaphora)
   (:export #:point
+           #:make-point
            #:pos-diff
            #:pos-eq
            #:mlen
@@ -19,7 +20,9 @@
 
 ;; coordinate is an array of three elements #(x y z)
 
-(defun point (c1 c2 c3)
+(deftype point () `(simple-array (unsigned-byte 8) (3)))
+
+(defun make-point (c1 c2 c3)
   (make-array 3 :element-type '(unsigned-byte 8) :initial-contents (list c1 c2 c3)))
 
 (defun pos-diff (c1 c2)
