@@ -1,6 +1,7 @@
 (defpackage :src/coordinates
   (:use :common-lisp :anaphora)
-  (:export #:pos-diff
+  (:export #:point
+           #:pos-diff
            #:pos-eq
            #:mlen
            #:clen
@@ -18,19 +19,31 @@
 
 ;; coordinate is an array of three elements #(x y z)
 
+(defun point (c1 c2 c3)
+  (make-array 3 :element-type '(unsigned-byte 8) :initial-contents (list c1 c2 c3)))
+
 (defun pos-diff (c1 c2)
-  "A coordinate difference d specifies the relative position of one coordinate to another and is written <dx, dy, dz>, where dx, dy, and dz are (positive or negative) integers. Adding distance d = <dx, dy, dz> to coordinate c = <x, y, z>, written c + d, yields the coordinate <x + dx, y + dy, z + dz>."
+  "A coordinate difference d specifies the relative position of one coordinate
+to another and is written <dx, dy, dz>, where dx, dy, and dz are (positive or
+negative) integers. Adding distance d = <dx, dy, dz> to coordinate c = <x, y,
+z>, written c + d, yields the coordinate <x + dx, y + dy, z + dz>."
   (aops:each #'- c1 c2))
 
 (defun pos-eq (c1 c2)
   (equalp c1 c2))
 
 (defun mlen (diff)
-  "The Manhattan length (or L1 norm) of a coordinate difference d = <dx, dy, dz> is written mlen(d) and defined as |dx| + |dy| + |dz| (the sum of the absolute values of dx, dy, and dz). The Manhattan length of a coordinate difference is always a non-negative integer."
+  "The Manhattan length (or L1 norm) of a coordinate difference d = <dx, dy, dz>
+is written mlen(d) and defined as |dx| + |dy| + |dz| (the sum of the absolute
+values of dx, dy, and dz). The Manhattan length of a coordinate difference is
+always a non-negative integer."
   (reduce #'+ (aops:each #'abs diff)))
 
 (defun clen (diff)
-  "The Chessboard length (or Chebyshev distance or L∞ norm) of a coordinate difference d = <dx, dy, dz> is written clen(d) and defined as max(|dx|, |dy|, |dz|) (the maximum of the absolute values of dx, dy, and dz). The Chessboard length of a coordinate difference is always a non-negative integer."
+  "The Chessboard length (or Chebyshev distance or L∞ norm) of a coordinate
+difference d = <dx, dy, dz> is written clen(d) and defined as max(|dx|, |dy|,
+|dz|) (the maximum of the absolute values of dx, dy, and dz). The Chessboard
+length of a coordinate difference is always a non-negative integer."
   (reduce #'max (aops:each #'abs diff)))
 
 (defun adjacent? (c1 c2)
@@ -90,7 +103,12 @@
        ,@body)))
 
 (defun region-dimension (r)
-  "The dimension of a region r = [(x1, y1, z1), (x2, y2, z2)] is written dim(r) and is defined as (x1 = x2 ? 0 : 1) + (y1 = y2 ? 0 : 1) + (z1 = z2 ? 0 : 1). That is, the dimension of a region counts the number of components that differ. A region with dimension 0 is a “point”; a region with dimension 1 is a “line”; a region with dimension 2 is a “plane”; and a region with dimension 3 is a “box”."
+  "The dimension of a region r = [(x1, y1, z1), (x2, y2, z2)] is written dim(r)
+and is defined as (x1 = x2 ? 0 : 1) + (y1 = y2 ? 0 : 1) + (z1 = z2 ? 0 :
+1). That is, the dimension of a region counts the number of components that
+differ. A region with dimension 0 is a “point”; a region with dimension 1 is a
+“line”; a region with dimension 2 is a “plane”; and a region with dimension 3 is
+a “box”."
   (destructuring-bind (c1 c2) r
     (with-coordinates (x1 y1 z1) c1
       (with-coordinates (x2 y2 z2) c2
