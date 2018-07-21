@@ -114,8 +114,8 @@
 (defun decode-commands (stream)
   "Return list of command objects read from stream."
   (loop
-     :for b := (read-byte stream :eof-value nil)
-     :then (read-byte stream :eof-value nil)
+     :for b := (read-byte stream nil nil)
+     :then (read-byte stream nil nil)
      :while b
      :collect (cond ((= b #b11111111) (make-instance 'halt))
                     ((= b #b11111110) (make-instance 'wait))
@@ -276,7 +276,7 @@
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fill))
-  (%bytes 1 (logior #b00000011 (encode-nd (nd cmd)))))
+  (%bytes 1 (logior #b00000011 (ash (encode-nd (nd cmd)) 3))))
 
 (defmethod get-volatile-regions ((cmd fill) (bot nanobot))
   (let* ((bpos (bot-pos bot))
