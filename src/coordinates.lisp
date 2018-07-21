@@ -13,7 +13,9 @@
            #:in-region
            #:region-dimension
            #:region-points
-           #:with-coordinates))
+           #:with-coordinates
+           #:inside-field?
+           #:mapc-adjacent))
 
 (in-package :src/coordinates)
 
@@ -36,6 +38,9 @@
 (defun pos-add (c1 c2)
   "Adds two coordinates"
   (aops:each #'+ c1 c2))
+
+(defun copy-point (p)
+  (make-array 3 :element-type '(unsigned-byte 8) :initial-contents p))
 
 (defun pos-diff (c1 c2)
   "A coordinate difference d specifies the relative position of one coordinate
@@ -64,6 +69,15 @@ length of a coordinate difference is always a non-negative integer."
 (defun adjacent? (c1 c2)
   (let ((d (pos-diff c1 c2)))
     (= (mlen d) 1)))
+
+(defun mapc-adjacent (c r func)
+  (loop :for component :below 3
+     :do (loop :for d :in '(-1 1)
+            :do (let ((c1 (copy-point c)))
+                  (setf (aref c1 component)
+                        (+ d (aref c1 component)))
+                  (when (inside-field? c1 r)
+                    (funcall func c1))))))
 
 (defun diff-linear? (diff)
   (let ((linear nil))
@@ -108,6 +122,18 @@ length of a coordinate difference is always a non-negative integer."
            (unless (%check i)
              (return-from in-region nil)))
       t)))
+
+(defun inside-field? (c r)
+  "Checks wether coordinate all components of `c' 0 <= c < r"
+  (labels ((%check (i)
+             (and (>= (aref c i)
+                      0)
+                  (< (aref c i)
+                     r))))
+    (loop :for i :from 0 :to 2 :do
+       (unless (%check i)
+         (return-from inside-field? nil)))
+    t))
 
 (defmacro with-coordinates ((x y z) c-expr &body body)
   (alexandria:with-gensyms (c)

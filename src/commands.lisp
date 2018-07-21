@@ -15,7 +15,8 @@
    #:fusionp
    #:fusions
    ;; command operations
-   #:encode-command
+   #:encode-commands
+   #:decode-commands
    ))
 
 (in-package :src/commands)
@@ -79,6 +80,65 @@
         (dy (aref nd 1))
         (dz (aref nd 2)))
     (+ (* (1+ dx) 9) (* (1+ dy) 3) (1+ dz))))
+
+(declaim (ftype (function ((unsigned-byte 2) (unsigned-byte 4)) point) decode-sld))
+(defun decode-sld (a i)
+  (ecase a
+    (#b01 (make-point (- i 5) 0 0))
+    (#b10 (make-point 0 (- i 5) 0))
+    (#b11 (make-point 0 0 (- i 5)))))
+
+(declaim (ftype (function ((unsigned-byte 2) (unsigned-byte 5)) point) decode-lld))
+(defun decode-lld (a i)
+  (ecase a
+    (#b01 (make-point (- i 15) 0 0))
+    (#b10 (make-point 0 (- i 15) 0))
+    (#b11 (make-point 0 0 (- i 15)))))
+
+(declaim (ftype (function ((unsigned-byte 5)) point) decode-nd))
+(defun decode-nd (v)
+  (multiple-value-bind (dx1 r) (floor v 9)
+    (multiple-value-bind (dy1 r) (floor r 3)
+      (make-point (1- dx) (1- dy) (1- r)))))
+
+(defun decode-commands (stream)
+  "Return list of command objects read from stream."
+  (loop
+     :for b := (read-byte stream :eof-value nil)
+     :then (read-byte stream :eof-value nil)
+     :while b
+     :collect (cond ((= b #b11111111) (make-instance 'halt))
+                    ((= b #b11111110) (make-instance 'wait))
+                    ((= b #b11111101) (make-instance 'flip))
+                    ((= (logand b #b00001111) #b00000100) ; smove
+                     (let ((b1 (read-byte stream))
+                           (a (ash (logand b #b00110000) -4))
+                           (i b1))
+                       (make-instance 'smove :lld (decode-lld a i))))
+                    ((= (logand b #b00001111) #b00001100) ; lmove
+                     (let ((b1 (read-byte stream))
+                           (a2 (ash (logand b  #b11000000) -6))
+                           (i2 (ash (logand b1 #b11110000) -4))
+                           (a1 (ash (logand b  #b00110000) -4))
+                           (i1      (logand b1 #b00001111)))
+                       (make-instance 'lmove :sld1 (decode-sld a1 i1) :sld2 (decode-sld a2 i2))))
+                    ((= (logand b #b00000111) #b00000111) ; fusionp
+                     (let ((nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'fusionp :nd (decode-nd nd))))
+                    ((= (logand b #b00000111) #b00000110) ; fusions
+                     (let ((nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'fusions :nd (decode-nd nd))))
+                    ((= (logand b #b00000111) #b00000101) ; fission
+                     (let ((m (read-byte stream))
+                           (nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'fission :m m :nd (decode-nd nd))))
+                    ((= (logand b #b00000111) #b00000011) ; fill
+                     (let ((nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'fill :nd (decode-nd nd)))))))
+
+(defun encode-commands (commands)
+  "Encode commands and return octet vector."
+  (apply concatenate 'vector (mapcar #'encode-command commands)))
 
 
 ;;;------------------------------------------------------------------------------

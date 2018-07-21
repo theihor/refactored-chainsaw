@@ -1,10 +1,11 @@
-(defpackage :src/state
+(uiop:define-package :src/state
   (:use :common-lisp
         :src/coordinates)
   (:export #:well-formed?
            #:matrix-index
            #:voxel-state
            #:set-voxel-state
+           #:get-voxel
 
            #:state
            #:state-energy
@@ -30,13 +31,16 @@
 (defun matrix-index (c r)
   "Returns index of coordinate `c' in matrix bitarray"
   (with-coordinates (x y z) c
-    (let ((i (+ (* r r x) (* r y) z)))
+    (let ((i (+ z (* r y) (* r r x))))
       i)))
 
 (defun voxel-state (c m r)
   "Returns a state of the voxel at coordinate `c' in matrix `m' as Full (1) or Void (0).
    `r' is the resolution of the matrix"
   (aref m (matrix-index c r)))
+
+(defun get-voxel (state c)
+  (voxel-state c (state-matrix state) (state-r state)))
 
 (defun set-voxel-state (s c m r)
   (setf (aref m (matrix-index c r)) s))
