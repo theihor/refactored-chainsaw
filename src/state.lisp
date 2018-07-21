@@ -1,6 +1,24 @@
 (defpackage :src/state
   (:use :common-lisp
-        :src/coordinates))
+        :src/coordinates)
+  (:export #:well-formed?
+           #:voxel-state
+           #:set-voxel-state
+
+           #:state
+           #:state-energy
+           #:state-harmonics
+           #:state-bots
+           #:state-trace
+           #:state-matrix
+           #:state-r
+
+           #:nanobot
+           #:bot-pos
+           #:bot-trace
+           #:bot-bid
+           #:bot-seeds
+   ))
 
 (in-package :src/state)
 
@@ -45,7 +63,8 @@
           :initform nil
           :type list
           :accessor bot-seeds
-          :documentation "the set of identifiers available for fission")))
+          :documentation "the set of identifiers available for fission")
+  ))
 
 (defun well-formed? (s)
   (and (if (eq (state-harmonics s) :low)
