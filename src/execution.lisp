@@ -42,10 +42,24 @@
 
     groups))
 
+(defun check-volatile-regions (region-groups r)
+  "`region-groups' is list of lists of regions "
+  (let ((points (make-hash-table :test #'eq)))
+    (loop :for region-group :in region-groups :do
+         (loop :for region :in region-group :do
+              (loop :for point :in (region-points region) :do
+                   (let ((i (matrix-index point r)))
+                     (if (gethash i points)
+                         (error "Volatile regions intersect: ~A~%"
+                                region-groups)
+                         (setf (gethash i points) t))))))
+    t))
+
 (defun execute-one-step (state)
   (with-slots (trace) state
     (let* ((bots (sort #'< (copy-list (state-bots state)) :key #'bot-bid))
            (commands (take (length bots) commands))
            (groups (progn (assert (= (length commands) (length bots)))
                           (group-bots (mapcar #'cons bots commands)))))
+      
       )))

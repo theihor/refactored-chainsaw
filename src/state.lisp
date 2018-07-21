@@ -1,7 +1,9 @@
 (uiop:define-package :src/state
-  (:use :common-lisp
+    (:use :common-lisp
+          :anaphora
         :src/coordinates)
   (:export #:well-formed?
+           #:matrix-index
            #:voxel-state
            #:set-voxel-state
            #:get-voxel
@@ -23,6 +25,7 @@
            #:no-full-in-region
            #:voxel-full?
            #:voxel-void?
+           #:read-nanobots
    ))
 
 (in-package :src/state)
@@ -31,20 +34,22 @@
 ;; 1 <=> Full
 ;; 0 <=> Void
 
+(defun matrix-index (c r)
+  "Returns index of coordinate `c' in matrix bitarray"
+  (with-coordinates (x y z) c
+    (let ((i (+ z (* r y) (* r r x))))
+      i)))
+
 (defun voxel-state (c m r)
   "Returns a state of the voxel at coordinate `c' in matrix `m' as Full (1) or Void (0).
    `r' is the resolution of the matrix"
-  (with-coordinates (x y z) c
-    (let ((i (+ x (* r y) (* r r z))))
-      (aref m i))))
+  (aref m (matrix-index c r)))
 
 (defun get-voxel (state c)
   (voxel-state c (state-matrix state) (state-r state)))
 
 (defun set-voxel-state (s c m r)
-  (with-coordinates (x y z) c
-    (let ((i (+ x (* r y) (* r r z))))
-      (setf (aref m i) s))))
+  (setf (aref m (matrix-index c r)) s))
 
 (defun voxel-full? (state c)
   (= (get-voxel state c) 1))
@@ -101,3 +106,22 @@
 (defun no-full-in-region (state region)
   (not (some (lambda (p) (voxel-full? state p))
              (region-points region))))
+
+(defun read-nanobot-coordinate (stream)
+  "Reads coordinate for nanobot from STREAM"
+  (make-point (read-byte stream)
+              (read-byte stream)
+              (read-byte stream)))
+
+(defun read-nanobot (stream)
+  "Reads a single nanobot from strea. Returns nil in case of EOF"
+  (awhen (read-byte stream nil nil)
+    (make-instance 'nanobot
+                   :bid it
+                   :pos (read-nanobot-coordinate stream))))
+
+(defun read-nanobots (stream)
+  "Reads nanobots for extended model"
+  (loop for nanobot = (read-nanobot stream)
+     while nanobot
+     collect nanobot))
