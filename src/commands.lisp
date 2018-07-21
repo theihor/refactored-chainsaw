@@ -32,8 +32,8 @@
 
 (defgeneric encode-command (cmd))
 
-(defgeneric get-volotile-regions (cmd bot)
-  (:documentation "Return list of regions with volotile points"))
+(defgeneric get-volatile-regions (cmd bot)
+  (:documentation "Return list of regions with volatile points"))
 
 (defmacro %bytes (size &rest bytes)
   `(make-array ,size :element-type '(unsigned-byte 8) :initial-contents (list ,@bytes)))
@@ -151,7 +151,7 @@
 (defmethod encode-command ((cmd halt))
   (%bytes 1 #b11111111))
 
-(defmethod get-volotile-regions ((cmd halt) (bot nanobot))
+(defmethod get-volatile-regions ((cmd halt) (bot nanobot))
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
 
@@ -161,7 +161,7 @@
 (defmethod encode-command ((cmd wait))
   (%bytes 1 #b11111110))
 
-(defmethod get-volotile-regions ((cmd wait) (bot nanobot))
+(defmethod get-volatile-regions ((cmd wait) (bot nanobot))
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
 
@@ -171,7 +171,7 @@
 (defmethod encode-command ((cmd flip))
   (%bytes 1 #b11111101))
 
-(defmethod get-volotile-regions ((cmd flip) (bot nanobot))
+(defmethod get-volatile-regions ((cmd flip) (bot nanobot))
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
 
@@ -183,7 +183,7 @@
   (multiple-value-bind (a i) (encode-lld (lld cmd))
     (%bytes 2 (logior #b00000100 (ash a 4)) (logior #b00000000 i))))
 
-(defmethod get-volotile-regions ((cmd smove) (bot nanobot))
+(defmethod get-volatile-regions ((cmd smove) (bot nanobot))
   (let* ((bpos (bot-pos bot))
          (nbpos (pos-add bpos (lld cmd))))
     (list (make-region bpos nbpos))))
@@ -200,7 +200,7 @@
             (b2 (logior (ash i2 4) i1)))
         (%bytes 2 b1 b2)))))
 
-(defmethod get-volotile-regions ((cmd lmove) (bot nanobot))
+(defmethod get-volatile-regions ((cmd lmove) (bot nanobot))
   (let* ((bpos (bot-pos bot))
          (mbpos (pos-add bpos (sld1 cmd)))
          (nbpos (pos-add mbpos (sld2 cmd))))
@@ -214,7 +214,7 @@
 (defmethod encode-command ((cmd fission))
   (%bytes 2 (logior #b00000101 (encode-nd (nd cmd))) (m cmd)))
 
-(defmethod get-volotile-regions ((cmd fission) (bot nanobot))
+(defmethod get-volatile-regions ((cmd fission) (bot nanobot))
   (let* ((bpos (bot-pos bot))
          (nbpos (pos-add bpos (nd cmd))))
     (list (make-region bpos nbpos))))
@@ -226,7 +226,7 @@
 (defmethod encode-command ((cmd fill))
   (%bytes 1 (logior #b00000011 (encode-nd (nd cmd)))))
 
-(defmethod get-volotile-regions ((cmd fill) (bot nanobot))
+(defmethod get-volatile-regions ((cmd fill) (bot nanobot))
   (let* ((bpos (bot-pos bot))
          (fpos (pos-add bpos (nd cmd))))
     (list (make-region bpos fpos))))
@@ -241,7 +241,7 @@
 (defmethod encode-command ((cmd fusionp))
   (%bytes 1 (logior #b00000111 (encode-nd (nd cmd)))))
 
-(defmethod get-volotile-regions ((cmd fusionp) (bot nanobot))
+(defmethod get-volatile-regions ((cmd fusionp) (bot nanobot))
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
 
@@ -252,6 +252,6 @@
 (defmethod encode-command ((cmd fusions))
   (%bytes 1 (logior #b00000110 (encode-nd (nd cmd)))))
 
-(defmethod get-volotile-regions ((cmd fusions) (bot nanobot))
+(defmethod get-volatile-regions ((cmd fusions) (bot nanobot))
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
