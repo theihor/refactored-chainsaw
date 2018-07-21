@@ -74,7 +74,7 @@
 (defun make-coordinates (resolution full-coordinates)
   (let ((bit-array (make-array (* resolution resolution resolution) :element-type 'bit)))
     (dolist (c full-coordinates bit-array)
-      (set-voxel-state 1 c bit-array))))
+      (set-voxel-state 1 c bit-array resolution))))
 
 (defun read-coordinates (resolution stream)
   "Reads full coordinates from STREAM with given RESOLUTION.
