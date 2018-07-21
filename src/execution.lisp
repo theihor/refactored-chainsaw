@@ -26,12 +26,26 @@
       (loop :while alist
            (let ((bot-cmd (pop alist)))
              (%group-one bot-cmd alist))))
+
+    ;; check if groups are correct
+    (loop :for group :in groups :do
+         (ecase (length group)
+           (1 (assert (not (typep (cdr (car group)) '(or fusionp fusions)))))
+           (2 (destructuring-bind (b.c1 b.c2) group
+                (unless (or (and (typep (cdr b.c1) 'fusionp)
+                                 (typep (cdr b.c2) 'fusions))
+                            (and (typep (cdr b.c2) 'fusionp)
+                                 (typep (cdr b.c1) 'fusions)))
+                  (error "Group of 2 bots has invalid commands: ~A ~A~%"
+                         (type-of (cdr b.c1)) (cdr b.c2)))))
+           (t (error "Invalid group length: ~A ~A~%" (length group) group))))
+
     groups))
 
 (defun execute-one-step (state)
   (with-slots (trace) state
     (let* ((bots (sort #'< (copy-list (state-bots state)) :key #'bot-bid))
-           (commands (take (length bots) commands)))
-      (assert (= (length commands) (length bots)))
-      (group-bots (mapcar #'cons bots commands))
+           (commands (take (length bots) commands))
+           (groups (progn (assert (= (length commands) (length bots)))
+                          (group-bots (mapcar #'cons bots commands)))))
       )))

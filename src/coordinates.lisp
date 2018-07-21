@@ -10,6 +10,7 @@
            #:diff-near?
            #:in-region
            #:region-dimension
+           #:region-points
            #:with-coordinates))
 
 (in-package :src/coordinates)
@@ -119,6 +120,15 @@ a “box”."
            (if (= y1 y2) 1 0)
            (if (= z1 z2) 1 0))))))
 
-
+(defun region-points (r)
+  (let ((point-list nil))
+    (destructuring-bind (c1 c2) r
+      (with-coordinates (x1 y1 z1) c1
+        (with-coordinates (x2 y2 z2) c2
+          (loop :for i :from (min x1 x2) :to (max x1 x2) :do
+               (loop :for j :from (min y1 y2) :to (max y1 y2) :do
+                    (loop :for k :from (min z1 z2) :to (max z1 z2) :do
+                         (push (make-point i j k) point-list)))))))
+    point-list))
 
 
