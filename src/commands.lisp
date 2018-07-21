@@ -354,7 +354,7 @@
          (fpos (pos-add bpos (nd cmd))))
     (if (voxel-void? state fpos)
         (progn
-          (fill-voxel state bpos)
+          (fill-voxel state fpos)
           (setf (state-energy state)
                 (+ (state-energy state) 12)))
         (setf (state-energy state)
