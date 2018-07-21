@@ -1,10 +1,35 @@
 (defpackage :src/main
   (:nicknames :main)
-  (:use :common-lisp :anaphora))
+  (:use :common-lisp :anaphora
+        :src/state
+        :src/execution
+        :src/model)
+  (:import-from :src/commands
+                #:read-trace-from-file))
 
 (in-package :src/main)
 
-(defun main () 
+(defun execute-trace-on-model (model trace)
+  (let* ((r (model-resolution model))
+         (bot (make-instance 'nanobot
+                             :bid 1
+                             :pos #(0 0 0)
+                             :seeds (loop :for i :from 2 :to 20 :collect i)))
+         (state (make-state :r r
+                            :harmonics :low
+                            :matrix (make-array (* r r r)
+                                                :element-type 'bit
+                                                :initial-element 0)
+                            :bots (list bot)
+                            :trace trace)))
+    (execute-state-trace state)))
+
+(defun load-and-execute (model-file trace-file)
+  (let ((model (read-model-from-file model-file))
+        (trace (read-trace-from-file trace-file)))
+    (execute-trace-on-model model trace)))
+
+(defun main ()
   (when sb-ext:*posix-argv*
     (let* ((parsed-args (apply-argv:parse-argv* sb-ext:*posix-argv*))
 	   (files))

@@ -2,19 +2,25 @@
     (:use :common-lisp
           :anaphora
         :src/coordinates)
-  (:export #:well-formed?
-           #:matrix-index
+  (:export #:matrix-index
            #:voxel-state
            #:set-voxel-state
            #:get-voxel
            #:fill-voxel
 
            #:state
+           #:make-state
+           #:energy
            #:state-energy
+           #:harmonics
            #:state-harmonics
+           #:bots
            #:state-bots
+           #:trace
            #:state-trace
+           #:matrix
            #:state-matrix
+           #:r
            #:state-r
 
            #:nanobot
@@ -61,10 +67,6 @@
 (defun voxel-void? (state c)
   (= (get-voxel state c) 0))
 
-;; TODO: implement check if M grounded
-(defun grounded? (m)
-  nil)
-
 (defstruct state
   (energy 0 :type integer)                   ;; the amount of energy expended
   (harmonics :low :type (member :low :high)) ;; the (global) field harmonics
@@ -89,23 +91,7 @@
           :documentation "the set of identifiers available for fission")
   ))
 
-(defun well-formed? (s)
-  (and (if (eq (state-harmonics s) :low)
-           (grounded? (state-matrix s))
-           t)
-       (loop :for (b . rest) :on (state-bots s) :do
-            (unless (every (lambda (b1)
-                             (and (not (= (bot-bid b1)
-                                          (bot-bid b)))
-                                  (not (pos-eq (bot-pos b1)
-                                               (bot-pos b)))))
-                           rest)
-              (return-from well-formed? nil))
-            (every (lambda (seed)
-                     (not (member seed (state-bots s) :key #'bot-bid :test #'=)))
-                   (bot-seeds b)))
-       ;; TODO: clarify 'The seeds of each active nanobot are disjoint.'
-       ))
+
 
 (defun no-full-in-region (state region)
   (not (some (lambda (p) (voxel-full? state p))
