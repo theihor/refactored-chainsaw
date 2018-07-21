@@ -25,6 +25,8 @@
 
 (in-package :src/commands)
 
+(declaim (sb-ext:muffle-conditions sb-ext:compiler-note))
+
 ;;;------------------------------------------------------------------------------
 ;;; Generic definitions and utils
 ;;;------------------------------------------------------------------------------
