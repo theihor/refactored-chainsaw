@@ -2,6 +2,8 @@
   (:use :common-lisp :anaphora)
   (:export #:point
            #:make-point
+           #:make-region
+           #:pos-add
            #:pos-diff
            #:pos-eq
            #:mlen
@@ -25,6 +27,15 @@
 
 (defun make-point (c1 c2 c3)
   (make-array 3 :element-type '(unsigned-byte 8) :initial-contents (list c1 c2 c3)))
+
+;;(deftype region () ???)
+
+(defun make-region (p1 p2)
+  (cons p1 p2))
+
+(defun pos-add (c1 c2)
+  "Adds two coordinates"
+  (aops:each #'+ c1 c2))
 
 (defun pos-diff (c1 c2)
   "A coordinate difference d specifies the relative position of one coordinate
