@@ -19,6 +19,11 @@
                 :initarg :coordinates
                 :initform nil)))
 
+(defclass extended-model
+    ((nanobots :accessor ext-model-nanobots
+               :initarg :nanobots
+               :initform nil)))
+
 ;;; TODO: integrate with COORDINATE (or similar) used in state
 (defclass coordinate ()
   ((x :accessor coordinate-x
