@@ -34,6 +34,9 @@
 (defgeneric get-volotile-regions (cmd bot)
   (:documentation "Return list of regions with volotile points"))
 
+(defgeneric check-preconditions (cmd state bots)
+  (:documentation "Check if command is valid"))
+
 (defmacro %bytes (size &rest bytes)
   `(make-array ,size :element-type '(unsigned-byte 8) :initial-contents (list ,@bytes)))
 
@@ -95,6 +98,12 @@
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
 
+(defmethod check-preconditions ((cmd halt) (state state) bots)
+  (let ((bot (car bots)))
+    (and (null (cdr (state-bots state)))
+         (eq (state-harmonics state) :low)
+         (pos-eq (bot-pos bot) (make-point 0 0 0)))))
+
 ;; Wait
 (defclass wait (singleton) ())
 
@@ -105,6 +114,9 @@
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
 
+(defmethod check-preconditions ((cmd wait) (state state) bots)
+  t)
+
 ;;Flip
 (defclass flip (singleton) ())
 
@@ -114,6 +126,9 @@
 (defmethod get-volotile-regions ((cmd flip) (bot nanobot))
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
+
+(defmethod check-preconditions ((cmd flip) (state state) bots)
+  t)
 
 ;;Smove
 (defclass smove (singleton)
@@ -127,6 +142,14 @@
   (let* ((bpos (bot-pos bot))
          (nbpos (pos-add bpos (lld cmd))))
     (list (make-region bpos nbpos))))
+
+(defmethod check-preconditions ((cmd smove) (state state) bots)
+  (let* ((bot (car bots))
+         (bpos (bot-pos bot))
+         (nbpos (pos-add bpos (lld cmd)))
+         (region (make-region bpos nbpos)))
+    (and (inside-field? nbpos (state-r state))
+         (no-full-in-region state region))))
 
 ;;Lmove 
 (defclass lmove (singleton)
@@ -146,6 +169,18 @@
          (nbpos (pos-add mbpos (sld2 cmd))))
     (list (make-region bpos mbpos) (make-region mbpos nbpos))))
 
+(defmethod check-preconditions ((cmd lmove) (state state) bots)
+  (let* ((bot (car bots))
+         (bpos (bot-pos bot))
+         (mbpos (pos-add bpos (sld1 cmd)))
+         (nbpos (pos-add mbpos (sld2 cmd)))
+         (region1 (make-region bpos mbpos))
+         (region2 (make-region mbpos nbpos)))
+    (and (inside-field? mbpos (state-r state))
+         (inside-field? nbpos (state-r state))
+         (no-full-in-region state region1)
+         (no-full-in-region state region2))))
+
 ;;Fission
 (defclass fission (singleton)
   ((nd :accessor nd :initarg :nd)
@@ -159,6 +194,16 @@
          (nbpos (pos-add bpos (nd cmd))))
     (list (make-region bpos nbpos))))
 
+(defmethod check-preconditions ((cmd fission) (state state) bots)
+  (let* ((bot (car bots))
+         (bpos (bot-pos bot))
+         (nbpos (pos-add bpos (nd cmd))))
+    (and (bot-seeds bot)
+         (inside-field? nbpos (state-r state))
+         (voxel-void? state nbpos)
+         (> (length (bot-seeds bot)) (m cmd)) ;; N >= M + 1
+         )))
+
 ;;Fill
 (defclass fill (singleton)
   ((nd :accessor nd :initarg :nd)))
@@ -171,9 +216,21 @@
          (fpos (pos-add bpos (nd cmd))))
     (list (make-region bpos fpos))))
 
+(defmethod check-preconditions ((cmd fission) (state state) bots)
+  (let* ((bpos (bot-pos (car bots)))
+         (nbpos (pos-add bpos (nd cmd))))
+    (inside-field? nbpos (state-r state))))
+
 ;;;------------------------------------------------------------------------------
 ;;; Group commands
 ;;;------------------------------------------------------------------------------
+(defun check-preconditions-fussion (state bots)
+  (let ((fbpos (bot-pos (first bots)))
+        (sbpos (bot-pos (second bots)))
+        (r (state-r state)))
+    (and (inside-field? fbpos r)
+         (inside-field? sbpos r))))
+
 ;;Fusionp
 (defclass fusionp (group)
   ((nd :accessor nd :initarg :nd)))
@@ -185,6 +242,9 @@
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
 
+(defmethod check-preconditions ((cmd fusionp) (state state) bots)
+  (check-preconditions-fussion state bots))
+
 ;;Fusions
 (defclass fusions (group)
   ((nd :accessor nd :initarg :nd)))
@@ -195,3 +255,6 @@
 (defmethod get-volotile-regions ((cmd fusions) (bot nanobot))
   (let ((bpos (bot-pos bot)))
     (list (make-region bpos bpos))))
+
+(defmethod check-preconditions ((cmd fusions) (state state) bots)
+  (check-preconditions-fussion state bots))

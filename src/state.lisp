@@ -19,6 +19,10 @@
            #:bot-trace
            #:bot-bid
            #:bot-seeds
+
+           #:no-full-in-region
+           #:voxel-full?
+           #:voxel-void?
    ))
 
 (in-package :src/state)
@@ -41,6 +45,12 @@
   (with-coordinates (x y z) c
     (let ((i (+ x (* r y) (* r r z))))
       (setf (aref m i) s))))
+
+(defun voxel-full? (state c)
+  (= (get-voxel state c) 1))
+
+(defun voxel-void? (state c)
+  (= (get-voxel state c) 0))
 
 ;; TODO: implement check if M grounded
 (defun grounded? (m)
@@ -87,3 +97,7 @@
                    (bot-seeds b)))
        ;; TODO: clarify 'The seeds of each active nanobot are disjoint.'
        ))
+
+(defun no-full-in-region (state region)
+  (not (some (lambda (p) (voxel-full? state p))
+             (region-points region))))
