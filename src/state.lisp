@@ -10,11 +10,17 @@
 
            #:state
            #:make-state
+           #:energy
            #:state-energy
+           #:harmonics
            #:state-harmonics
+           #:bots
            #:state-bots
+           #:trace
            #:state-trace
+           #:matrix
            #:state-matrix
+           #:r
            #:state-r
 
            #:nanobot

@@ -15,12 +15,13 @@
                              :bid 1
                              :pos #(0 0 0)
                              :seeds (loop :for i :from 2 :to 20 :collect i)))
-         (state (make-state
-                :r r
-                :matrix (make-array (* r r r)
-                                    :element-type 'bit
-                                    :initial-element 0)
-                :trace trace)))
+         (state (make-state :r r
+                            :harmonics :low
+                            :matrix (make-array (* r r r)
+                                                :element-type 'bit
+                                                :initial-element 0)
+                            :bots (list bot)
+                            :trace trace)))
     (execute-state-trace state)))
 
 (defun load-and-execute (model-file trace-file)

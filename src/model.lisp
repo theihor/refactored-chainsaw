@@ -37,9 +37,9 @@
   (let ((stream-position
          (+ encoded-coordinate-index bits-read-so-far)))
     (let ((number-of-z-rows (floor stream-position resolution)))
-      (point (floor number-of-z-rows resolution)
-             (mod number-of-z-rows resolution)
-             (mod stream-position resolution)))))
+      (make-point (floor number-of-z-rows resolution)
+                  (mod number-of-z-rows resolution)
+                  (mod stream-position resolution)))))
 
 ;;; Sizes in bits
 (defconstant +chunk-size+ 8)
@@ -67,7 +67,7 @@
 (defun make-coordinates (resolution full-coordinates)
   (let ((bit-array (make-array (* resolution resolution resolution) :element-type 'bit)))
     (dolist (c full-coordinates bit-array)
-      (set-voxel-state 1 c bit-array resolution))))
+      (set-voxel-state 1 c bit-array))))
 
 (defun read-coordinates (resolution stream)
   "Reads full coordinates from STREAM with given RESOLUTION.

@@ -108,11 +108,11 @@ length of a coordinate difference is always a non-negative integer."
   (and (<= (mlen diff) 2)
        (= (clen diff) 1)))
 
-;; region is a list of two coordinates (c1 c2)
+;; region is a cons of two coordinates (c1 . c2)
 
 (defun in-region (c r)
   "Checks wether coordinate `c' is a member of a region `r'"
-  (destructuring-bind (c1 c2) r
+  (destructuring-bind (c1 . c2) r
     (labels ((%check (i)
                (and (>= (aref c i)
                         (min (aref c1 i)
@@ -152,7 +152,7 @@ and is defined as (x1 = x2 ? 0 : 1) + (y1 = y2 ? 0 : 1) + (z1 = z2 ? 0 :
 differ. A region with dimension 0 is a “point”; a region with dimension 1 is a
 “line”; a region with dimension 2 is a “plane”; and a region with dimension 3 is
 a “box”."
-  (destructuring-bind (c1 c2) r
+  (destructuring-bind (c1 . c2) r
     (with-coordinates (x1 y1 z1) c1
       (with-coordinates (x2 y2 z2) c2
         (+ (if (= x1 x2) 1 0)
@@ -161,7 +161,7 @@ a “box”."
 
 (defun region-points (r)
   (let ((point-list nil))
-    (destructuring-bind (c1 c2) r
+    (destructuring-bind (c1 . c2) r
       (with-coordinates (x1 y1 z1) c1
         (with-coordinates (x2 y2 z2) c2
           (loop :for i :from (min x1 x2) :to (max x1 x2) :do

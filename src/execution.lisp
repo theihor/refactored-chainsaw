@@ -5,7 +5,8 @@
         :src/state
         :src/coordinates
         :src/grounded
-        :src/utils))
+        :src/utils)
+  (:export #:execute-state-trace))
 
 (in-package :src/execution)
 
@@ -13,21 +14,24 @@
   (and (if (eq (state-harmonics s) :low)
            (grounded-check gs)
            t)
-       (loop :for (b . rest) :on (state-bots s) :do
-            (unless (every (lambda (b1)
-                             (and (not (= (bot-bid b1)
-                                          (bot-bid b)))
-                                  (not (pos-eq (bot-pos b1)
-                                               (bot-pos b)))))
-                           rest)
-              (return-from well-formed? nil))
-            (every (lambda (seed)
-                     (not (member seed (state-bots s) :key #'bot-bid :test #'=)))
-                   (bot-seeds b))
-            (loop :for (s . s-rest) :on (bot-seeds b) :do
-                 (unless (every (lambda (s1) (not (= s1 s)))
-                                s-rest)
-                   (return-from well-formed? nil))))))
+       (progn
+         (loop :for (b . rest) :on (state-bots s) :do
+              (unless (and (every (lambda (b1)
+                                    (and (not (= (bot-bid b1)
+                                                 (bot-bid b)))
+                                         (not (pos-eq (bot-pos b1)
+                                                      (bot-pos b)))))
+                                  rest)
+                           (every (lambda (seed)
+                                    (not (member seed (state-bots s)
+                                                 :key #'bot-bid :test #'=)))
+                                  (bot-seeds b)))
+                (return-from well-formed? nil))
+              (loop :for (s . s-rest) :on (bot-seeds b) :do
+                   (unless (every (lambda (s1) (not (= s1 s)))
+                                  s-rest)
+                     (return-from well-formed? nil))))
+         t)))
 
 (defun execute-state-trace (state)
   (let ((gs (make-instance 'grounded-state)))
