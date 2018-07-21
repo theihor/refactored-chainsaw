@@ -59,24 +59,24 @@
      collect
        (decode-coordinate encoded-coordinate-index bits-read-so-far resolution)))
 
-(defun to-bit-array (full-coordinates resolution)
+(defun make-coordinates (resolution full-coordinates)
   (let ((bit-array (make-array (* resolution resolution resolution) :element-type 'bit)))
     (dolist (c full-coordinates bit-array)
       (set-voxel-state 1 c bit-array resolution))))
 
-(defun read-full-coordinates (resolution stream)
+(defun read-coordinates (resolution stream)
   "Reads full coordinates from STREAM with given RESOLUTION.
 Assumes RESOLUTION^(+DIMENSIONS+) bits"
-  (let ((expected-size (expt resolution +dimensions+)))
-    (to-bit-array
+  (make-coordinates
+   resolution
+   (let ((expected-size (expt resolution +dimensions+)))
      (loop
         for bits-read-so-far = 0 then (+ bits-read-so-far +chunk-size+)
         while (< bits-read-so-far expected-size)
 
         for chunk = (read-byte stream)
         unless (zerop chunk)
-        nconc (decode-full-coordinates chunk bits-read-so-far resolution))
-     resolution)))
+        nconc (decode-full-coordinates chunk bits-read-so-far resolution)))))
 
 (defun read-resolution (stream)
   "Reads resolution for a model"
@@ -88,7 +88,7 @@ Reads the first byte to determine the resolution. Then reads using 8 bit chunks.
   (let ((mdl (make-instance 'model)))
     (with-slots (resolution coordinates) mdl
       (setf resolution (read-resolution stream))
-      (setf coordinates (read-full-coordinates resolution stream)))
+      (setf coordinates (read-coordinates resolution stream)))
     mdl))
 
 (defun read-model-from-file (filename)
@@ -103,7 +103,7 @@ Reads the first byte to determine the resolution. Then reads using 8 bit chunks.
     (let ((model-files
            (delete-if-not #'%is-model-file (cl-fad:list-directory dirname))))
       (dolist (filename model-files)
-        (let ((model (read-model-from-file filename)))
+        (let ((model (time (read-model-from-file filename))))
           (format t "~A read successfully: R = ~A, coordinates = ~A~%"
                   (pathname-name filename)
                   (model-resolution model)
