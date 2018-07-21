@@ -1,6 +1,33 @@
-(defpackage :src/state
-  (:use :common-lisp
-        :src/coordinates))
+(uiop:define-package :src/state
+    (:use :common-lisp
+          :anaphora
+        :src/coordinates)
+  (:export #:well-formed?
+           #:matrix-index
+           #:voxel-state
+           #:set-voxel-state
+           #:get-voxel
+           #:fill-voxel
+
+           #:state
+           #:state-energy
+           #:state-harmonics
+           #:state-bots
+           #:state-trace
+           #:state-matrix
+           #:state-r
+
+           #:nanobot
+           #:bot-pos
+           #:bot-trace
+           #:bot-bid
+           #:bot-seeds
+
+           #:no-full-in-region
+           #:voxel-full?
+           #:voxel-void?
+           #:read-nanobots
+   ))
 
 (in-package :src/state)
 
@@ -8,17 +35,31 @@
 ;; 1 <=> Full
 ;; 0 <=> Void
 
-(defun voxel-state (c m r)
+(defun matrix-index (c)
+  "Returns index of coordinate `c' in matrix bitarray"
+  (with-coordinates (x y z) c
+    (let ((i (+ z (* +dimensions+ y) (* +dimensions+ +dimensions+ x))))
+      i)))
+
+(defun voxel-state (c m)
   "Returns a state of the voxel at coordinate `c' in matrix `m' as Full (1) or Void (0).
    `r' is the resolution of the matrix"
-  (with-coordinates (x y z) c
-    (let ((i (+ x (* r y) (* r r z))))
-      (aref m i))))
+  (aref m (matrix-index c)))
 
-(defun set-voxel-state (s c m r)
-  (with-coordinates (x y z) c
-    (let ((i (+ x (* r y) (* r r z))))
-      (setf (aref m i) s))))
+(defun get-voxel (state c)
+  (voxel-state c (state-matrix state)))
+
+(defun fill-voxel (state c)
+  (set-voxel-state 1 c (state-matrix state)))
+
+(defun set-voxel-state (s c m)
+  (setf (aref m (matrix-index c)) s))
+
+(defun voxel-full? (state c)
+  (= (get-voxel state c) 1))
+
+(defun voxel-void? (state c)
+  (= (get-voxel state c) 0))
 
 ;; TODO: implement check if M grounded
 (defun grounded? (m)
@@ -45,7 +86,8 @@
           :initform nil
           :type list
           :accessor bot-seeds
-          :documentation "the set of identifiers available for fission")))
+          :documentation "the set of identifiers available for fission")
+  ))
 
 (defun well-formed? (s)
   (and (if (eq (state-harmonics s) :low)
@@ -64,3 +106,26 @@
                    (bot-seeds b)))
        ;; TODO: clarify 'The seeds of each active nanobot are disjoint.'
        ))
+
+(defun no-full-in-region (state region)
+  (not (some (lambda (p) (voxel-full? state p))
+             (region-points region))))
+
+(defun read-nanobot-coordinate (stream)
+  "Reads coordinate for nanobot from STREAM"
+  (make-point (read-byte stream)
+              (read-byte stream)
+              (read-byte stream)))
+
+(defun read-nanobot (stream)
+  "Reads a single nanobot from strea. Returns nil in case of EOF"
+  (awhen (read-byte stream nil nil)
+    (make-instance 'nanobot
+                   :bid it
+                   :pos (read-nanobot-coordinate stream))))
+
+(defun read-nanobots (stream)
+  "Reads nanobots for extended model"
+  (loop for nanobot = (read-nanobot stream)
+     while nanobot
+     collect nanobot))

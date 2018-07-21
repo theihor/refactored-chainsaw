@@ -1,4 +1,6 @@
 *.FASL
 *.fasl
 *.lisp-temp
+*.~undo-tree~
+*.orig
 main

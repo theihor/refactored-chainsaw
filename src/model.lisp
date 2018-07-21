@@ -1,6 +1,7 @@
 (uiop:define-package :src/model
     (:use :common-lisp
-          :src/coordinates)
+          :src/coordinates
+          :src/state)
   (:export
    #:read-model
    #:read-model-from-file
@@ -21,10 +22,13 @@
                 :initarg :coordinates
                 :initform nil)))
 
-(defclass extended-model (model)
-    ((nanobots :accessor ext-model-nanobots
-               :initarg :nanobots
-               :initform nil)))
+(defclass extended-model ()
+  ((model :accessor regular-model
+          :initarg :model
+          :initform nil)
+   (nanobots :accessor ext-model-nanobots
+             :initarg :nanobots
+             :initform nil)))
 
 
 (defun decode-coordinate (encoded-coordinate-index bits-read-so-far resolution)
@@ -58,17 +62,24 @@
      collect
        (decode-coordinate encoded-coordinate-index bits-read-so-far resolution)))
 
-(defun read-full-coordinates (resolution stream)
+(defun make-coordinates (resolution full-coordinates)
+  (let ((bit-array (make-array (* resolution resolution resolution) :element-type 'bit)))
+    (dolist (c full-coordinates bit-array)
+      (set-voxel-state 1 c bit-array resolution))))
+
+(defun read-coordinates (resolution stream)
   "Reads full coordinates from STREAM with given RESOLUTION.
 Assumes RESOLUTION^(+DIMENSIONS+) bits"
-  (let ((expected-size (expt resolution +dimensions+)))
-    (loop
-       for bits-read-so-far = 0 then (+ bits-read-so-far +chunk-size+)
-       while (< bits-read-so-far expected-size)
+  (make-coordinates
+   resolution
+   (let ((expected-size (expt resolution +dimensions+)))
+     (loop
+        for bits-read-so-far = 0 then (+ bits-read-so-far +chunk-size+)
+        while (< bits-read-so-far expected-size)
 
-       for chunk = (read-byte stream)
-       unless (zerop chunk)
-       nconc (decode-full-coordinates chunk bits-read-so-far resolution))))
+        for chunk = (read-byte stream)
+        unless (zerop chunk)
+        nconc (decode-full-coordinates chunk bits-read-so-far resolution)))))
 
 (defun read-resolution (stream)
   "Reads resolution for a model"
@@ -80,12 +91,23 @@ Reads the first byte to determine the resolution. Then reads using 8 bit chunks.
   (let ((mdl (make-instance 'model)))
     (with-slots (resolution coordinates) mdl
       (setf resolution (read-resolution stream))
-      (setf coordinates (read-full-coordinates resolution stream)))
+      (setf coordinates (read-coordinates resolution stream)))
     mdl))
 
 (defun read-model-from-file (filename)
   (with-open-file (stream filename :element-type '(unsigned-byte 8))
     (read-model stream)))
+
+
+(defun read-extended-model (stream)
+  "Reads a regular model, then reads nanobots"
+  (let ((ext-mdl (make-instance 'extended-model
+                                :model (read-model stream))))
+    (setf (ext-model-nanobots ext-mdl) (read-nanobots stream))))
+
+(defun read-nanobot-extended-model-from-file (filename)
+  (with-open-file (stream filename :element-type '(unsigned-byte 8))
+    (read-extended-model stream)))
 
 
 ;;; Tests
@@ -95,7 +117,7 @@ Reads the first byte to determine the resolution. Then reads using 8 bit chunks.
     (let ((model-files
            (delete-if-not #'%is-model-file (cl-fad:list-directory dirname))))
       (dolist (filename model-files)
-        (let ((model (read-model-from-file filename)))
+        (let ((model (time (read-model-from-file filename))))
           (format t "~A read successfully: R = ~A, coordinates = ~A~%"
                   (pathname-name filename)
                   (model-resolution model)

@@ -1,0 +1,90 @@
+(uiop:define-package :src/execution
+    (:use :common-lisp
+          :src/state
+          :src/commands
+          :src/coordinates))
+
+(defun execute-state-trace (state)
+  (assert (well-formed? state))
+  (loop :while (state-bots state)
+       (execute-one-step state))
+  state)
+
+(defun group-bots (bot-command-alist)
+  "Returns list of bot-command-alists"
+  (let ((alist (copy-list bot-command-alist))
+        (groups nil))
+    (labels ((%group-one (bot)
+               (destructuring-bind (bot . cmd) bot-cmd
+                 (typecase cmd
+                   ((or fusionp fusions)
+                    (let ((bot-cmd2 (find-if (lambda (b.c)
+                                               (pos-eq (bot-pos (car b.c))
+                                                       (nd cmd)))
+                                             alist)))
+                      (push (list bot-cmd bot-cmd2) groups)
+                      (setf alist (remove bot-cmd2 alist :test #'eq))))
+                   (t (push (list bot-cmd) groups))))))
+      (loop :while alist
+           (let ((bot-cmd (pop alist)))
+             (%group-one bot-cmd alist))))
+
+    ;; check if groups are correct
+    (loop :for group :in groups :do
+         (ecase (length group)
+           (1 (assert (not (typep (cdr (car group)) '(or fusionp fusions)))))
+           (2 (destructuring-bind (b.c1 b.c2) group
+                (unless (or (and (typep (cdr b.c1) 'fusionp)
+                                 (typep (cdr b.c2) 'fusions))
+                            (and (typep (cdr b.c2) 'fusionp)
+                                 (typep (cdr b.c1) 'fusions)))
+                  (error "Group of 2 bots has invalid commands: ~A ~A~%"
+                         (type-of (cdr b.c1)) (cdr b.c2)))))
+           (t (error "Invalid group length: ~A ~A~%" (length group) group))))
+
+    groups))
+
+(defun check-volatile-regions (region-groups)
+  "`region-groups' is list of lists of regions "
+  (let ((points (make-hash-table :test #'eq)))
+    (loop :for region-group :in region-groups :do
+         (loop :for region :in region-group :do
+              (loop :for point :in (region-points region) :do
+                   (let ((i (matrix-index point)))
+                     (if (gethash i points)
+                         (error "Volatile regions intersect: ~A~%"
+                                region-groups)
+                         (setf (gethash i points) t))))))
+    t))
+
+(defun execute-one-step (state)
+  (with-slots (trace energy harmonics r) state
+    (let* ((bots (sort #'< (copy-list (state-bots state)) :key #'bot-bid))
+           (n (length bots))
+           (commands (take n commands))
+           (groups (progn (assert (= (length commands) n))
+                          (group-bots (mapcar #'cons bots commands))))
+           (volatile-region-groups
+            (loop :for group :in groups :collect
+                 (loop :for (bot . cmd) :in group :append
+                      (get-volatile-regions cmd bot)))))
+      (check-volatile-regions volatile-region-groups)
+      (loop :for group :in groups :do
+           (loop :for (bot . cmd) :in group :do
+                (unless (check-preconditions
+                         cmd state (mapcar #'car group))
+                  (error "Preconditions failed for command ~A and group ~A"
+                         cmd group))))
+
+      ;; global maintainance
+      (ecase harmonics
+        (:high (incf energy (* 30 r r r)))
+        (:low (incf energy (* 3 r r r))))
+      ;; bots maintainance
+      (incf energy (* 20 n))
+
+      (loop :for group :in groups :do
+           (loop :for (bot . cmd) :in group :do
+                (execute cmd bot state)))
+
+      (setf trace (nthcdr n trace)))))

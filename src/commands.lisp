@@ -1,6 +1,7 @@
 (uiop:define-package :src/commands
     (:use :common-lisp)
-  (:use :src/coordinates)
+  (:use :src/coordinates
+        :src/state)
   (:shadow #:fill)
   (:export
    ;; commands
@@ -14,10 +15,17 @@
    #:fusionp
    #:fusions
    ;; command operations
-   #:encode-command
+   #:encode-commands
+   #:decode-commands
+
+   #:get-volatile-regions
+   #:check-preconditions
+   #:execute
    ))
 
 (in-package :src/commands)
+
+(declaim (sb-ext:muffle-conditions sb-ext:compiler-note))
 
 ;;;------------------------------------------------------------------------------
 ;;; Generic definitions and utils
@@ -29,6 +37,15 @@
   ())
 
 (defgeneric encode-command (cmd))
+
+(defgeneric get-volatile-regions (cmd bot)
+  (:documentation "Return list of regions with volatile points"))
+
+(defgeneric check-preconditions (cmd state bots)
+  (:documentation "Check if command is valid"))
+
+(defgeneric execute (cmd state bot)
+  (:documentation "Execute command and change states"))
 
 (defmacro %bytes (size &rest bytes)
   `(make-array ,size :element-type '(unsigned-byte 8) :initial-contents (list ,@bytes)))
@@ -76,25 +93,126 @@
         (dz (aref nd 2)))
     (+ (* (1+ dx) 9) (* (1+ dy) 3) (1+ dz))))
 
+(declaim (ftype (function ((unsigned-byte 2) (unsigned-byte 4)) point) decode-sld))
+(defun decode-sld (a i)
+  (ecase a
+    (#b01 (make-point (- i 5) 0 0))
+    (#b10 (make-point 0 (- i 5) 0))
+    (#b11 (make-point 0 0 (- i 5)))))
+
+(declaim (ftype (function ((unsigned-byte 2) (unsigned-byte 5)) point) decode-lld))
+(defun decode-lld (a i)
+  (ecase a
+    (#b01 (make-point (- i 15) 0 0))
+    (#b10 (make-point 0 (- i 15) 0))
+    (#b11 (make-point 0 0 (- i 15)))))
+
+(declaim (ftype (function ((unsigned-byte 5)) point) decode-nd))
+(defun decode-nd (v)
+  (multiple-value-bind (dx1 r) (floor v 9)
+    (multiple-value-bind (dy1 r) (floor r 3)
+      (make-point (1- dx1) (1- dy1) (1- r)))))
+
+(defun decode-commands (stream)
+  "Return list of command objects read from stream."
+  (loop
+     :for b := (read-byte stream nil nil)
+     :then (read-byte stream nil nil)
+     :while b
+     :collect (cond ((= b #b11111111) (make-instance 'halt))
+                    ((= b #b11111110) (make-instance 'wait))
+                    ((= b #b11111101) (make-instance 'flip))
+                    ((= (logand b #b00001111) #b00000100) ; smove
+                     (let* ((b1 (read-byte stream))
+                            (a (ash (logand b #b00110000) -4))
+                            (i b1))
+                       (make-instance 'smove :lld (decode-lld a i))))
+                    ((= (logand b #b00001111) #b00001100) ; lmove
+                     (let* ((b1 (read-byte stream))
+                            (a2 (ash (logand b  #b11000000) -6))
+                            (i2 (ash (logand b1 #b11110000) -4))
+                            (a1 (ash (logand b  #b00110000) -4))
+                            (i1      (logand b1 #b00001111)))
+                       (make-instance 'lmove :sld1 (decode-sld a1 i1) :sld2 (decode-sld a2 i2))))
+                    ((= (logand b #b00000111) #b00000111) ; fusionp
+                     (let ((nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'fusionp :nd (decode-nd nd))))
+                    ((= (logand b #b00000111) #b00000110) ; fusions
+                     (let ((nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'fusions :nd (decode-nd nd))))
+                    ((= (logand b #b00000111) #b00000101) ; fission
+                     (let ((m (read-byte stream))
+                           (nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'fission :m m :nd (decode-nd nd))))
+                    ((= (logand b #b00000111) #b00000011) ; fill
+                     (let ((nd (ash (logand b #b11111000) -3)))
+                       (make-instance 'fill :nd (decode-nd nd)))))))
+
+(defun encode-commands (commands)
+  "Encode commands and return octet vector."
+  (apply #'concatenate 'vector (mapcar #'encode-command commands)))
+
 
 ;;;------------------------------------------------------------------------------
 ;;; Singleton commands
 ;;;------------------------------------------------------------------------------
+
+;; Halt
 (defclass halt (singleton) ())
 
 (defmethod encode-command ((cmd halt))
   (%bytes 1 #b11111111))
 
+(defmethod get-volatile-regions ((cmd halt) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+(defmethod check-preconditions ((cmd halt) (state state) bots)
+  (let ((bot (car bots)))
+    (and (null (cdr (state-bots state)))
+         (eq (state-harmonics state) :low)
+         (pos-eq (bot-pos bot) (make-point 0 0 0)))))
+
+(defmethod execute ((cmd halt) (state state) (bot nanobot))
+  (setf (state-bots state) nil)
+  state)
+
+;; Wait
 (defclass wait (singleton) ())
 
 (defmethod encode-command ((cmd wait))
   (%bytes 1 #b11111110))
 
+(defmethod get-volatile-regions ((cmd wait) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+(defmethod check-preconditions ((cmd wait) (state state) bots)
+  t)
+
+(defmethod execute ((cmd wait) (state state) (bot nanobot))
+  state)
+
+;;Flip
 (defclass flip (singleton) ())
 
 (defmethod encode-command ((cmd flip))
   (%bytes 1 #b11111101))
 
+(defmethod get-volatile-regions ((cmd flip) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+(defmethod check-preconditions ((cmd flip) (state state) bots)
+  t)
+
+(defmethod execute ((cmd flip) (state state) (bot nanobot))
+  (if (eq (state-harmonics state) :high)
+      (setf (state-harmonics state) :low)
+      (setf (state-harmonics state) :high))
+  state)
+
+;;Smove
 (defclass smove (singleton)
   ((lld :accessor lld :initarg :lld)))
 
@@ -102,6 +220,29 @@
   (multiple-value-bind (a i) (encode-lld (lld cmd))
     (%bytes 2 (logior #b00000100 (ash a 4)) (logior #b00000000 i))))
 
+(defmethod get-volatile-regions ((cmd smove) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (nbpos (pos-add bpos (lld cmd))))
+    (list (make-region bpos nbpos))))
+
+(defmethod check-preconditions ((cmd smove) (state state) bots)
+  (let* ((bot (car bots))
+         (bpos (bot-pos bot))
+         (nbpos (pos-add bpos (lld cmd)))
+         (region (make-region bpos nbpos)))
+    (and (inside-field? nbpos (state-r state))
+         (no-full-in-region state region))))
+
+(defmethod execute ((cmd smove) (state state) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (nbpos (pos-add bpos (lld cmd))))
+    (setf (bot-pos bot) nbpos)
+    (setf (state-energy state)
+          (+ (state-energy state)
+             (* 2 (mlen (lld cmd)))))
+    state))
+
+;;Lmove 
 (defclass lmove (singleton)
   ((sld1 :accessor sld1 :initarg :sld1)
    (sld2 :accessor sld2 :initarg :sld2)))
@@ -113,6 +254,37 @@
             (b2 (logior (ash i2 4) i1)))
         (%bytes 2 b1 b2)))))
 
+(defmethod get-volatile-regions ((cmd lmove) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (mbpos (pos-add bpos (sld1 cmd)))
+         (nbpos (pos-add mbpos (sld2 cmd))))
+    (list (make-region bpos mbpos) (make-region mbpos nbpos))))
+
+(defmethod check-preconditions ((cmd lmove) (state state) bots)
+  (let* ((bot (car bots))
+         (bpos (bot-pos bot))
+         (mbpos (pos-add bpos (sld1 cmd)))
+         (nbpos (pos-add mbpos (sld2 cmd)))
+         (region1 (make-region bpos mbpos))
+         (region2 (make-region mbpos nbpos)))
+    (and (inside-field? mbpos (state-r state))
+         (inside-field? nbpos (state-r state))
+         (no-full-in-region state region1)
+         (no-full-in-region state region2))))
+
+(defmethod execute ((cmd lmove) (state state) bot)
+  (let* ((bpos (bot-pos bot))
+         (mbpos (pos-add bpos (sld1 cmd)))
+         (nbpos (pos-add mbpos (sld2 cmd))))
+    (setf (bot-pos bot) nbpos)
+    (setf (state-energy state)
+          (+ (state-energy state)
+             (* 2 (+ (mlen (sld1 cmd))
+                     (mlen (sld2 cmd))
+                     2))))
+    state))
+
+;;Fission
 (defclass fission (singleton)
   ((nd :accessor nd :initarg :nd)
    (m :accessor m :initarg :m)))
@@ -120,23 +292,84 @@
 (defmethod encode-command ((cmd fission))
   (%bytes 2 (logior #b00000101 (encode-nd (nd cmd))) (m cmd)))
 
+(defmethod get-volatile-regions ((cmd fission) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (nbpos (pos-add bpos (nd cmd))))
+    (list (make-region bpos nbpos))))
+
+(defmethod check-preconditions ((cmd fission) (state state) bots)
+  (let* ((bot (car bots))
+         (bpos (bot-pos bot))
+         (nbpos (pos-add bpos (nd cmd))))
+    (and (bot-seeds bot)
+         (inside-field? nbpos (state-r state))
+         (voxel-void? state nbpos)
+         (> (length (bot-seeds bot)) (m cmd)) ;; N >= M + 1
+         )))
+
+;;Fill
 (defclass fill (singleton)
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fill))
-  (%bytes 1 (logior #b00000011 (encode-nd (nd cmd)))))
+  (%bytes 1 (logior #b00000011 (ash (encode-nd (nd cmd)) 3))))
+
+(defmethod get-volatile-regions ((cmd fill) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (fpos (pos-add bpos (nd cmd))))
+    (list (make-region bpos fpos))))
+
+(defmethod check-preconditions ((cmd fill) (state state) bots)
+  (let* ((bpos (bot-pos (car bots)))
+         (fpos (pos-add bpos (nd cmd))))
+    (inside-field? fpos (state-r state))))
+
+(defmethod execute ((cmd fill) (state state) bot)
+  (let* ((bpos (bot-pos bot))
+         (fpos (pos-add bpos (nd cmd))))
+    (if (voxel-void? state fpos)
+        (progn
+          (fill-voxel state bpos)
+          (setf (state-energy state)
+                (+ (state-energy state) 12)))
+        (setf (state-energy state)
+              (+ (state-energy state) 6)))
+    state))
 
 ;;;------------------------------------------------------------------------------
 ;;; Group commands
 ;;;------------------------------------------------------------------------------
+(defun check-preconditions-fussion (state bots)
+  (let ((fbpos (bot-pos (first bots)))
+        (sbpos (bot-pos (second bots)))
+        (r (state-r state)))
+    (and (inside-field? fbpos r)
+         (inside-field? sbpos r))))
+
+;;Fusionp
 (defclass fusionp (group)
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fusionp))
   (%bytes 1 (logior #b00000111 (encode-nd (nd cmd)))))
 
+(defmethod get-volatile-regions ((cmd fusionp) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+(defmethod check-preconditions ((cmd fusionp) (state state) bots)
+  (check-preconditions-fussion state bots))
+
+;;Fusions
 (defclass fusions (group)
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fusions))
   (%bytes 1 (logior #b00000110 (encode-nd (nd cmd)))))
+
+(defmethod get-volatile-regions ((cmd fusions) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+(defmethod check-preconditions ((cmd fusions) (state state) bots)
+  (check-preconditions-fussion state bots))
