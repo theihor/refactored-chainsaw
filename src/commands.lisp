@@ -17,6 +17,11 @@
    ;; command operations
    #:encode-commands
    #:decode-commands
+   ;; command accessors
+   #:nd
+
+   #:get-volatile-regions
+   #:check-preconditions
    ))
 
 (in-package :src/commands)
