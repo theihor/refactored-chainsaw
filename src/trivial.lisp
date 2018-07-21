@@ -67,7 +67,7 @@
         (moves nil))
     (with-coordinates (dx dy dz) diff
       (loop :until (and (= dx 0) (= dy 0) (= dz 0)) :do
-           (format t "~A ~A ~A~%" dx dy dz)
+         ;; (format t "~A ~A ~A~%" dx dy dz)
            (let ((adx (abs dx))
                  (ady (abs dy))
                  (adz (abs dz))
@@ -94,13 +94,25 @@
                 (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)
                 (setf dz 0))
                ((= dx 0)
-                (push (make-instance 'lmove :sld1 (make-point 0 dy 0) :sld2 (make-point 0 0 dz)) moves)
+                (if (and (/= dy 0) (/= dz 0))
+                    (push (make-instance 'lmove :sld1 (make-point 0 dy 0) :sld2 (make-point 0 0 dz)) moves)
+                    (if (/= dy 0)
+                        (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)
+                        (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)))
                 (setf dy 0) (setf dz 0))
                ((= dy 0)
-                (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 0 dz)) moves)
+                (if (and (/= dx 0) (/= dz 0))
+                    (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 0 dz)) moves)
+                    (if (/= dx 0)
+                        (push (make-instance 'smove :lld (make-point dx 0 0)) moves)
+                        (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)))
                 (setf dx 0) (setf dz 0))
                ((= dz 0)
-                (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 dy 0)) moves)
+                (if (and (/= dx 0) (/= dy 0))
+                    (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 dy 0)) moves)
+                    (if (/= dx 0)
+                        (push (make-instance 'smove :lld (make-point dx 0 0)) moves)
+                        (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)))
                 (setf dx 0) (setf dy 0))
                (t ;; (0 < dx <= 5) and (0 < dy <= 5) and (0 < dz <= 5)
                 (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 0 dz)) moves)
@@ -131,12 +143,10 @@
                (let ((new-bot-pos (make-point x (1+ y) z))
                      (c (make-point x y z)))
                  (when (voxel-void? state c)
-                   (setf commands (append
-                                   (reverse (gen-move-commands
-                                             bot-pos new-bot-pos))
-                                   commands))
+                   (setf commands (append (reverse (moves-in-clear-space bot-pos new-bot-pos))
+                                          commands))
                    (setf bot-pos new-bot-pos)
-                   (push (make-instance 'fill) commands)))))
+                   (push (make-instance 'fill :nd (make-point 0 -1 0)) commands)))))
       (destructuring-bind (c1 . c2) (compute-model-bounding-box model)
         (with-coordinates (x1 y1 z1) c1
           (with-coordinates (x2 y2 z2) c2
@@ -148,12 +158,21 @@
                           (loop :for z :from z2 :downto z1 :do
                                (%move-to-and-fill x y z)))))))))
 
-    (setf commands (append (reverse (gen-move-commands bot-pos #(0 0 0)))
-                           commands))
+    (setf commands (append (reverse (moves-in-clear-space bot-pos #(0 0 0))) commands))
 
     (when (eq (state-harmonics state) :high)
       (push (make-instance 'flip) commands))
 
     (push (make-instance 'halt) commands)
 
-    commands))
+    (reverse commands)))
+
+(defun trivial-tracer (in-file out-file)
+  (let* ((model (read-model-from-file in-file))
+         (commands (generate-trace :trivial model)))
+    (with-open-file (stream out-file
+                            :direction :output
+                            :if-exists :supersede
+                            :if-does-not-exist :create
+                            :element-type '(unsigned-byte 8))
+      (write-sequence (encode-commands commands) stream))))
