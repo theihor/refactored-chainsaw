@@ -125,7 +125,7 @@
 
 (defmethod get-volotile-regions ((cmd smove) (bot nanobot))
   (let* ((bpos (bot-pos bot))
-         (nbpos (poss-add bot-pos (lld cmd))))
+         (nbpos (pos-add bpos (lld cmd))))
     (list (make-region bpos nbpos))))
 
 ;;Lmove 
@@ -142,8 +142,8 @@
 
 (defmethod get-volotile-regions ((cmd lmove) (bot nanobot))
   (let* ((bpos (bot-pos bot))
-         (mbpos (poss-add bpos (sld1 cmd)))
-         (nbpos (poss-add mbpos (sld2 cmd))))
+         (mbpos (pos-add bpos (sld1 cmd)))
+         (nbpos (pos-add mbpos (sld2 cmd))))
     (list (make-region bpos mbpos) (make-region mbpos nbpos))))
 
 ;;Fission
@@ -167,8 +167,8 @@
   (%bytes 1 (logior #b00000011 (encode-nd (nd cmd)))))
 
 (defmethod get-volotile-regions ((cmd fill) (bot nanobot))
-  (let* ((bpos (bot-pos))
-         (fpos (poss-add bpos (nd cmd))))
+  (let* ((bpos (bot-pos bot))
+         (fpos (pos-add bpos (nd cmd))))
     (list (make-region bpos fpos))))
 
 ;;;------------------------------------------------------------------------------
