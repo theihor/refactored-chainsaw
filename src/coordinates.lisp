@@ -17,7 +17,9 @@
            #:inside-field?
            #:mapc-adjacent
            #:+dimensions+
-           #:ident-vec))
+           #:ident-vec
+           #:mapc-near
+           #:copy-point))
 
 (in-package :src/coordinates)
 
@@ -82,13 +84,6 @@ length of a coordinate difference is always a non-negative integer."
                   (when (inside-field? c1 r)
                     (funcall func c1))))))
 
-(defun ident-vec (coord)
-  (labels ((%one (val)
-             (signum val)))
-    (with-coordinates (x y z)
-        coord
-      (make-point (%one x) (%one y) (%one z)))))
-
 (defun diff-linear? (diff)
   (let ((linear nil))
     (aops:each (lambda (x)
@@ -152,6 +147,26 @@ length of a coordinate difference is always a non-negative integer."
             (,y (aref ,c 1))
             (,z (aref ,c 2)))
        ,@body)))
+
+(defun mapc-near (c r func)
+  (with-coordinates (x y z) c
+    (loop :for dx :in '(-1 0 1)
+       :do (loop :for dy :in '(-1 0 1)
+              :do (loop :for dz :in '(-1 0 1)
+                     :do (let ((c1 (make-point (+ x dx)
+                                               (+ y dy)
+                                               (+ z dz))))
+                           (when (and
+                                  (adjacent? c c1)
+                                  (inside-field? c1 r))
+                             (funcall func c1))))))))
+
+(defun ident-vec (coord)
+  (labels ((%one (val)
+             (signum val)))
+    (with-coordinates (x y z)
+        coord
+      (make-point (%one x) (%one y) (%one z)))))
 
 (defun region-dimension (r)
   "The dimension of a region r = [(x1, y1, z1), (x2, y2, z2)] is written dim(r)

@@ -44,12 +44,11 @@
 (defun try-moves (coord check-func register-func)
   (labels ((%one-dir (coord component iter sign num-moves func)
              (when (<= iter num-moves)
-               (let ((delta (make-point 0 0 0)))
-                 (setf (aref delta component) sign)
-                 (let ((c1 (pos-add coord delta)))
-                   (when (funcall check-func c1)
-                     (funcall func c1 iter component)
-                     (%one-dir c1 component (1+ iter) sign num-moves func))))))
+               (let ((c1 (copy-point coord)))
+                 (incf (aref c1 component) sign)
+                 (when (funcall check-func c1)
+                   (funcall func c1 iter component)
+                   (%one-dir c1 component (1+ iter) sign num-moves func)))))
            (%try-l-move (coord1 component)
              (loop :for sign :in '(-1 1)
                 :do (loop :for comp1 :below 3
@@ -78,13 +77,16 @@
                  :diffs (list (pos-diff (first coord-list) orig-coord)
                               (pos-diff (second coord-list) (first coord-list))))))
 
-(defun shortest-path (coord targets state)
+(defun shortest-path (start-coord targets state &key same-level)
   (let ((wave (make-hash-table :test #'equalp)))
     (labels ((%iter (coords)
                ;; (format t "Front: ~A~%" coords)
                (let ((new-front nil))
                  (loop :for coord :in coords
-                    :do (if (gethash coord targets)
+                    :do (if (and (target-set-get coord targets)
+                                 (or (null same-level)
+                                     (= (aref coord 1)
+                                        (aref start-coord 1))))
                             (return-from shortest-path
                               (values
                                coord
@@ -93,7 +95,10 @@
                              coord
                              (lambda (coord1)
                                (and (inside-field? coord1 (state-r state))
-                                    (not (voxel-full? state coord1))))
+                                    (not (voxel-full? state coord1))
+                                    (or (null same-level)
+                                        (= (aref coord 1)
+                                           (aref start-coord 1)))))
                              (lambda (coord-list)
                                (let ((coord1 (car (last coord-list))))
                                  (when (null (gethash coord1 wave))
@@ -104,9 +109,9 @@
                  ;; (format t "New front: ~A~%" new-front)
                  (when new-front
                    (%iter new-front)))))
-      (setf (gethash coord wave)
+      (setf (gethash start-coord wave)
             (list :start))
-      (%iter (list coord)))))
+      (%iter (list start-coord)))))
 
 (defun initial-to-fill-set (model)
   (let ((tab (make-hash-table :test #'equalp)))
@@ -117,21 +122,71 @@
                       (setf (gethash c tab) t)))))
     tab))
 
-(defun fill-set-to-target-set (fill-set r)
-  (let ((tab (make-hash-table :test #'equalp)))
+(defstruct fill-direction
+  component
+  sign)
+
+(defun dir-to? (coord1 coord2 dir)
+  (let ((comp-val (aref (pos-diff coord2 coord1) (fill-direction-component dir))))
+    (= (signum comp-val) (fill-direction-sign dir))))
+
+(defstruct trg-set
+  tab
+  y-count)
+
+(defun make-target-set (r)
+  (make-trg-set :tab (make-hash-table :test #'equalp)
+                :y-count (make-array r :element-type 'fixnum :initial-element 0)))
+
+(defun target-set-put (coord target-set)
+  (with-slots (tab y-count)
+      target-set
+    (unless (gethash coord tab)
+      (setf (gethash coord tab) t)
+      (incf (aref y-count (aref coord 1))))))
+
+(defun target-set-remove (coord target-set)
+  (with-slots (tab y-count)
+      target-set
+    (when (gethash coord tab)
+      (remhash coord tab)
+      (decf (aref y-count (aref coord 1))))))
+
+(defun target-set-get (coord target-set)
+  (with-slots (tab)
+      target-set
+    (gethash coord tab)))
+
+(defun target-set-count (target-set)
+  (with-slots (tab)
+      target-set
+    (hash-table-count tab)))
+
+(defun target-set-elems-at-y (target-set coord)
+  (with-slots (y-count)
+      target-set
+    (aref y-count (aref coord 1))))
+
+(defun one-target-fill (dir coord fill-set target-set state)
+  (mapc-near
+   coord (state-r state)
+   (lambda (coord1)
+     (when (dir-to? coord1 coord dir)
+       (unless (or (gethash coord1 fill-set)
+                   (voxel-full? state coord1))
+         (target-set-put coord1 target-set))))))
+
+(defun fill-set-to-target-set (dir fill-set state)
+  (let ((tab (make-target-set (state-r state))))
     (maphash (lambda (coord v)
                (declare (ignore v))
-               (mapc-adjacent
-                coord r
-                (lambda (coord1)
-                  (unless (gethash coord1 fill-set)
-                    (setf (gethash coord1 tab) t)))))
+               (one-target-fill dir coord fill-set tab state))
              fill-set)
     tab))
 
 (defun update-fill-set (coord fill-set state model)
   (remhash coord fill-set)
-  (mapc-adjacent
+  (mapc-near
    coord (state-r state)
    (lambda (coord1)
      (when (and (voxel-full? model coord1)
@@ -140,31 +195,28 @@
 
 (defun remove-adj-from-target-set (coord fill-set target-set state)
   (let ((still-target nil))
-    (mapc-adjacent coord (state-r state)
-                   (lambda (c1)
-                     (when (gethash c1 fill-set)
-                       (setf still-target t))))
+    (mapc-near coord (state-r state)
+               (lambda (c1)
+                 (when (gethash c1 fill-set)
+                   (setf still-target t))))
     (unless still-target
-      (remhash coord target-set))))
+      (target-set-remove coord target-set))))
 
-(defun update-target-set (filled-coord fill-set target-set state)
-  (remhash filled-coord target-set)
-  (mapc-adjacent
+(defun update-target-set (dir filled-coord fill-set target-set state)
+  (target-set-remove filled-coord target-set)
+  (mapc-near
    filled-coord (state-r state)
    (lambda (coord1)
      (remove-adj-from-target-set coord1 fill-set target-set state)
      (when (gethash coord1 fill-set)
-       (mapc-adjacent
-        coord1 (state-r state)
-        (lambda (coord2)
-          (unless (gethash coord2 fill-set)
-            (setf (gethash coord2 target-set) t))))))))
+       (one-target-fill dir coord1 fill-set target-set state)))))
 
-(defun find-to-fill (coord fill-set state)
-  (mapc-adjacent
+(defun find-to-fill (dir coord fill-set state)
+  (mapc-near
    coord (state-r state)
    (lambda (coord1)
-     (when (gethash coord1 fill-set)
+     (when (and (gethash coord1 fill-set)
+                (dir-to? coord coord1 dir))
        (return-from find-to-fill coord1))))
   nil)
 
@@ -189,7 +241,9 @@
                             :bots nil
                             :trace nil))
          (fill-set (initial-to-fill-set model))
-         (target-set (fill-set-to-target-set fill-set (state-r state))))
+         (dir (make-fill-direction :component 1
+                                   :sign -1))
+         (target-set (fill-set-to-target-set dir fill-set state)))
     (labels ((%commands (commands)
                (push commands res-trace))
              (%halt ()
@@ -197,35 +251,40 @@
              (%result ()
                (alexandria:mappend #'identity (reverse res-trace)))
              (%move-to (coord)
-               (let* ((tab (make-hash-table :test #'equalp))
-                      (dummy (setf (gethash coord tab) t))
+               (let* ((tab (make-target-set (state-r state)))
+                      (dummy (target-set-put coord tab))
                       (moves (nth-value 1 (shortest-path bot-coord tab state))))
                  (declare (ignore dummy))
                  (%commands (moves-to-commands moves)))))
       (loop
          :do (progn
                (format t "Bot: ~A~%" bot-coord)
-               (format t "Fill set: ~A~%" (alexandria:hash-table-keys fill-set))
-               (format t "Target set: ~A~%" (alexandria:hash-table-keys target-set))
-               (let ((coord (find-to-fill bot-coord fill-set state)))
-                 (format t "Can fill coord: ~A~%" coord)
+               ;; (format t "Fill set: ~A~%" (alexandria:hash-table-keys fill-set))
+               ;; (format t "Target set: ~A~%" (alexandria:hash-table-keys (trg-set-tab target-set)))
+               (let ((coord (find-to-fill dir bot-coord fill-set state)))
+                 ;; (format t "Can fill coord: ~A~%" coord)
                  (if coord
                      (progn
                        (%commands (list (make-instance 'fill
                                                        :nd (pos-diff coord bot-coord))))
                        (fill-voxel state coord)
                        (update-fill-set coord fill-set state model)
-                       (update-target-set coord fill-set target-set state))
-                     (if (= (hash-table-count target-set) 0)
+                       (update-target-set dir coord fill-set target-set state))
+                     (if (= (target-set-count target-set) 0)
                          (return)
                          (multiple-value-bind (goto-coord moves)
-                             (shortest-path bot-coord target-set state)
-                           (format t "Then goto ~A~%" goto-coord)
+                             (shortest-path bot-coord target-set state
+                                            :same-level
+                                            (if (> (target-set-elems-at-y target-set bot-coord) 0)
+                                                t
+                                                nil))
+                           ;; (format t "Then goto ~A~%" goto-coord)
                            (unless goto-coord
                              (return)
                              ;; (error "AAAAAA")
                              )
                            (%commands (moves-to-commands moves))
+                           (target-set-remove goto-coord target-set)
                            (setf bot-coord goto-coord)))))))
       (unless (pos-eq bot-coord (make-point 0 0 0))
         (%move-to (make-point 0 0 0)))
