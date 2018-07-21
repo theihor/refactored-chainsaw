@@ -1,10 +1,14 @@
 (uiop:define-package :src/model
     (:use :common-lisp
-          :src/coordinates
-          :src/state)
+          :src/coordinates)
+  (:import-from :src/state
+                #:set-voxel-state
+                #:make-state)
   (:export
    #:model-resolution
-   
+
+   #:make-pseudo-state-from-model
+
    #:read-model
    #:read-model-from-file
    #:read-models-in-dir))
@@ -32,6 +36,9 @@
              :initarg :nanobots
              :initform nil)))
 
+(defun make-pseudo-state-from-model (model)
+  (make-state :r (model-resolution model)
+              :matrix (model-coordinates model)))
 
 (defun decode-coordinate (encoded-coordinate-index bits-read-so-far resolution)
   (let ((stream-position

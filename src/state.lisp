@@ -1,7 +1,7 @@
 (uiop:define-package :src/state
     (:use :common-lisp
           :anaphora
-        :src/coordinates)
+          :src/coordinates)
   (:export #:matrix-index
            #:voxel-state
            #:set-voxel-state
@@ -33,7 +33,7 @@
            #:voxel-full?
            #:voxel-void?
            #:read-nanobots
-   ))
+           ))
 
 (in-package :src/state)
 
@@ -90,8 +90,6 @@
           :accessor bot-seeds
           :documentation "the set of identifiers available for fission")
   ))
-
-
 
 (defun no-full-in-region (state region)
   (not (some (lambda (p) (voxel-full? state p))
