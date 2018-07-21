@@ -1,5 +1,6 @@
 (uiop:define-package :src/commands
     (:use :common-lisp)
+  (:use :src/coordinates)
   (:shadow #:fill)
   (:export
    ;; commands
@@ -30,7 +31,50 @@
 (defgeneric encode-command (cmd))
 
 (defmacro %bytes (size &rest bytes)
-  `(make-array ,size :element-type '(unsigned-byte 8) :initial-contents ',bytes))
+  `(make-array ,size :element-type '(unsigned-byte 8) :initial-contents (list ,@bytes)))
+
+(declaim (ftype (function (point) (values (unsigned-byte 2) (unsigned-byte 4))) encode-sld))
+(defun encode-sld (sld)
+  "A short linear coordinate difference sld = <dx, dy, dz> is encoded as a 2-bit
+   axis a and a 4-bit (unsigned) integer i as follows:
+      if dx ≠ 0, then a = [01]2 and i = dx + 5;
+      if dy ≠ 0, then a = [10]2 and i = dy + 5;
+      if dz ≠ 0, then a = [11]2 and i = dz + 5.
+   Returns (values a i)."
+  (let ((dx (aref sld 0))
+        (dy (aref sld 1))
+        (dz (aref sld 2)))
+    (cond ((not (zerop dx)) (values #b01 (+ dx 5)))
+          ((not (zerop dy)) (values #b10 (+ dy 5)))
+          ((not (zerop dz)) (values #b11 (+ dz 5))))))
+
+(declaim (ftype (function (point) (values (unsigned-byte 2) (unsigned-byte 5))) encode-lld))
+(defun encode-lld (lld)
+  "A long linear coordinate difference lld = <dx, dy, dz> is encoded as a 2-bit
+   axis a and a 5-bit (unsigned) integer i as follows:
+      if dx ≠ 0, then a = [01]2 and i = dx + 15;
+      if dy ≠ 0, then a = [10]2 and i = dy + 15;
+      if dz ≠ 0, then a = [11]2 and i = dz + 15.
+   Returns (values a i)."
+  (let ((dx (aref lld 0))
+        (dy (aref lld 1))
+        (dz (aref lld 2)))
+    (cond ((not (zerop dx)) (values #b01 (+ dx 15)))
+          ((not (zerop dy)) (values #b10 (+ dy 15)))
+          ((not (zerop dz)) (values #b11 (+ dz 15))))))
+
+(declaim (ftype (function (point) (unsigned-byte 5)) encode-nd))
+(defun encode-nd (nd)
+  "A near coordinate difference nd = <dx, dy, dz> is encoded as a
+   5-bit (unsigned) integer with the value (dx + 1) * 9 + (dy + 1) * 3 + (dz +
+   1). Recall that each component of a near coordinate difference must have the
+   value -1, 0, or 1, but not all combinations are legal. In particular, <1, 1,
+   1> is not a near coordinate difference; hence the 5-bit value [11111]5 = 31 is
+   not the encoding of any near coordinate difference."
+  (let ((dx (aref nd 0))
+        (dy (aref nd 1))
+        (dz (aref nd 2)))
+    (+ (* (1+ dx) 9) (* (1+ dy) 3) (1+ dz))))
 
 
 ;;;------------------------------------------------------------------------------
@@ -55,31 +99,32 @@
   ((lld :accessor lld :initarg :lld)))
 
 (defmethod encode-command ((cmd smove))
-  ;; TODO(whythat): implement
-  )
+  (multiple-value-bind (a i) (encode-lld (lld cmd))
+    (%bytes 2 (logior #b00000100 (ash a 4)) (logior #b00000000 i))))
 
 (defclass lmove (singleton)
   ((sld1 :accessor sld1 :initarg :sld1)
    (sld2 :accessor sld2 :initarg :sld2)))
 
 (defmethod encode-command ((cmd lmove))
-  ;; TODO(whythat): implement
-  )
+  (multiple-value-bind (a1 i1) (encode-sld (sld1 cmd))
+    (multiple-value-bind (a2 i2) (encode-sld (sld2 cmd))
+      (let ((b1 (logior #b00001100 (ash a2 6) (ash a1 4)))
+            (b2 (logior (ash i2 4) i1)))
+        (%bytes 2 b1 b2)))))
 
 (defclass fission (singleton)
   ((nd :accessor nd :initarg :nd)
    (m :accessor m :initarg :m)))
 
 (defmethod encode-command ((cmd fission))
-  ;; TODO(whythat): implement
-  )
+  (%bytes 2 (logior #b00000101 (encode-nd (nd cmd))) (m cmd)))
 
 (defclass fill (singleton)
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fill))
-  ;; TODO(whythat): implement
-  )
+  (%bytes 1 (logior #b00000011 (encode-nd (nd cmd)))))
 
 ;;;------------------------------------------------------------------------------
 ;;; Group commands
@@ -88,12 +133,10 @@
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fusionp))
-  ;; TODO(whythat): implement
-  )
+  (%bytes 1 (logior #b00000111 (encode-nd (nd cmd)))))
 
 (defclass fusions (group)
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fusions))
-  ;; TODO(whythat): implement
-  )
+  (%bytes 1 (logior #b00000110 (encode-nd (nd cmd)))))
