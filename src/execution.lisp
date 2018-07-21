@@ -4,9 +4,11 @@
           :src/commands
           :src/coordinates))
 
-(defun execute (state)
+(defun execute-state-trace (state)
   (assert (well-formed? state))
-  (execute-one-step state))
+  (loop :while (state-bots state)
+       (execute-one-step state))
+  state)
 
 (defun group-bots (bot-command-alist)
   "Returns list of bot-command-alists"
@@ -58,8 +60,9 @@
 (defun execute-one-step (state)
   (with-slots (trace energy harmonics r) state
     (let* ((bots (sort #'< (copy-list (state-bots state)) :key #'bot-bid))
-           (commands (take (length bots) commands))
-           (groups (progn (assert (= (length commands) (length bots)))
+           (n (length bots))
+           (commands (take n commands))
+           (groups (progn (assert (= (length commands) n))
                           (group-bots (mapcar #'cons bots commands))))
            (volatile-region-groups
             (loop :for group :in groups :collect
@@ -67,14 +70,21 @@
                       (get-volatile-regions cmd bot)))))
       (check-volatile-regions volatile-region-groups)
       (loop :for group :in groups :do
-           )
+           (loop :for (bot . cmd) :in group :do
+                (unless (check-preconditions
+                         cmd state (mapcar #'car group))
+                  (error "Preconditions failed for command ~A and group ~A"
+                         cmd group))))
+
       ;; global maintainance
       (ecase harmonics
         (:high (incf energy (* 30 r r r)))
         (:low (incf energy (* 3 r r r))))
       ;; bots maintainance
-      (incf energy (* 20 (length bots)))
+      (incf energy (* 20 n))
 
-      
-      
-      )))
+      (loop :for group :in groups :do
+           (loop :for (bot . cmd) :in group :do
+                (execute cmd bot state)))
+
+      (setf trace (nthcdr n trace)))))
