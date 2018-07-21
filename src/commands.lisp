@@ -1,6 +1,7 @@
 (uiop:define-package :src/commands
     (:use :common-lisp)
-  (:use :src/coordinates)
+  (:use :src/coordinates
+        :src/state)
   (:shadow #:fill)
   (:export
    ;; commands
@@ -29,6 +30,9 @@
   ())
 
 (defgeneric encode-command (cmd))
+
+(defgeneric get-volotile-regions (cmd bot)
+  (:documentation "Return list of regions with volotile points"))
 
 (defmacro %bytes (size &rest bytes)
   `(make-array ,size :element-type '(unsigned-byte 8) :initial-contents (list ,@bytes)))
@@ -80,21 +84,38 @@
 ;;;------------------------------------------------------------------------------
 ;;; Singleton commands
 ;;;------------------------------------------------------------------------------
+
+;; Halt
 (defclass halt (singleton) ())
 
 (defmethod encode-command ((cmd halt))
   (%bytes 1 #b11111111))
 
+(defmethod get-volotile-regions ((cmd halt) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+;; Wait
 (defclass wait (singleton) ())
 
 (defmethod encode-command ((cmd wait))
   (%bytes 1 #b11111110))
 
+(defmethod get-volotile-regions ((cmd wait) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+;;Flip
 (defclass flip (singleton) ())
 
 (defmethod encode-command ((cmd flip))
   (%bytes 1 #b11111101))
 
+(defmethod get-volotile-regions ((cmd flip) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+;;Smove
 (defclass smove (singleton)
   ((lld :accessor lld :initarg :lld)))
 
@@ -102,6 +123,12 @@
   (multiple-value-bind (a i) (encode-lld (lld cmd))
     (%bytes 2 (logior #b00000100 (ash a 4)) (logior #b00000000 i))))
 
+(defmethod get-volotile-regions ((cmd smove) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (nbpos (poss-add bot-pos (lld cmd))))
+    (list (make-region bpos nbpos))))
+
+;;Lmove 
 (defclass lmove (singleton)
   ((sld1 :accessor sld1 :initarg :sld1)
    (sld2 :accessor sld2 :initarg :sld2)))
@@ -113,6 +140,13 @@
             (b2 (logior (ash i2 4) i1)))
         (%bytes 2 b1 b2)))))
 
+(defmethod get-volotile-regions ((cmd lmove) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (mbpos (poss-add bpos (sld1 cmd)))
+         (nbpos (poss-add mbpos (sld2 cmd))))
+    (list (make-region bpos mbpos) (make-region mbpos nbpos))))
+
+;;Fission
 (defclass fission (singleton)
   ((nd :accessor nd :initarg :nd)
    (m :accessor m :initarg :m)))
@@ -120,23 +154,44 @@
 (defmethod encode-command ((cmd fission))
   (%bytes 2 (logior #b00000101 (encode-nd (nd cmd))) (m cmd)))
 
+(defmethod get-volotile-regions ((cmd fission) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (nbpos (pos-add bpos (nd cmd))))
+    (list (make-region bpos nbpos))))
+
+;;Fill
 (defclass fill (singleton)
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fill))
   (%bytes 1 (logior #b00000011 (encode-nd (nd cmd)))))
 
+(defmethod get-volotile-regions ((cmd fill) (bot nanobot))
+  (let* ((bpos (bot-pos))
+         (fpos (poss-add bpos (nd cmd))))
+    (list (make-region bpos fpos))))
+
 ;;;------------------------------------------------------------------------------
 ;;; Group commands
 ;;;------------------------------------------------------------------------------
+;;Fusionp
 (defclass fusionp (group)
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fusionp))
   (%bytes 1 (logior #b00000111 (encode-nd (nd cmd)))))
 
+(defmethod get-volotile-regions ((cmd fusionp) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
+
+;;Fusions
 (defclass fusions (group)
   ((nd :accessor nd :initarg :nd)))
 
 (defmethod encode-command ((cmd fusions))
   (%bytes 1 (logior #b00000110 (encode-nd (nd cmd)))))
+
+(defmethod get-volotile-regions ((cmd fusions) (bot nanobot))
+  (let ((bpos (bot-pos bot)))
+    (list (make-region bpos bpos))))
