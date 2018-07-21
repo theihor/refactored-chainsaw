@@ -1,7 +1,25 @@
-(defpackage :src/state
+(uiop:define-package :src/state
   (:use :common-lisp
         :src/coordinates)
-  (:export :set-voxel-state))
+  (:export #:well-formed?
+           #:voxel-state
+           #:set-voxel-state
+           #:get-voxel
+
+           #:state
+           #:state-energy
+           #:state-harmonics
+           #:state-bots
+           #:state-trace
+           #:state-matrix
+           #:state-r
+
+           #:nanobot
+           #:bot-pos
+           #:bot-trace
+           #:bot-bid
+           #:bot-seeds
+   ))
 
 (in-package :src/state)
 
@@ -15,6 +33,9 @@
   (with-coordinates (x y z) c
     (let ((i (+ z (* r y) (* r r x))))
       (aref m i))))
+
+(defun get-voxel (state c)
+  (voxel-state c (state-matrix state) (state-r state)))
 
 (defun set-voxel-state (s c m r)
   (with-coordinates (x y z) c
@@ -46,7 +67,8 @@
           :initform nil
           :type list
           :accessor bot-seeds
-          :documentation "the set of identifiers available for fission")))
+          :documentation "the set of identifiers available for fission")
+  ))
 
 (defun well-formed? (s)
   (and (if (eq (state-harmonics s) :low)

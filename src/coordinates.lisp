@@ -2,6 +2,8 @@
   (:use :common-lisp :anaphora)
   (:export #:point
            #:make-point
+           #:make-region
+           #:pos-add
            #:pos-diff
            #:pos-eq
            #:mlen
@@ -10,7 +12,10 @@
            #:diff-near?
            #:in-region
            #:region-dimension
-           #:with-coordinates))
+           #:region-points
+           #:with-coordinates
+           #:inside-field?
+           #:mapc-adjacent))
 
 (in-package :src/coordinates)
 
@@ -24,6 +29,18 @@
 
 (defun make-point (c1 c2 c3)
   (make-array 3 :element-type '(unsigned-byte 8) :initial-contents (list c1 c2 c3)))
+
+;;(deftype region () ???)
+
+(defun make-region (p1 p2)
+  (cons p1 p2))
+
+(defun pos-add (c1 c2)
+  "Adds two coordinates"
+  (aops:each #'+ c1 c2))
+
+(defun copy-point (p)
+  (make-array 3 :element-type '(unsigned-byte 8) :initial-contents p))
 
 (defun pos-diff (c1 c2)
   "A coordinate difference d specifies the relative position of one coordinate
@@ -52,6 +69,15 @@ length of a coordinate difference is always a non-negative integer."
 (defun adjacent? (c1 c2)
   (let ((d (pos-diff c1 c2)))
     (= (mlen d) 1)))
+
+(defun mapc-adjacent (c r func)
+  (loop :for component :below 3
+     :do (loop :for d :in '(-1 1)
+            :do (let ((c1 (copy-point c)))
+                  (setf (aref c1 component)
+                        (+ d (aref c1 component)))
+                  (when (inside-field? c1 r)
+                    (funcall func c1))))))
 
 (defun diff-linear? (diff)
   (let ((linear nil))
@@ -97,6 +123,18 @@ length of a coordinate difference is always a non-negative integer."
              (return-from in-region nil)))
       t)))
 
+(defun inside-field? (c r)
+  "Checks wether coordinate all components of `c' 0 <= c < r"
+  (labels ((%check (i)
+             (and (>= (aref c i)
+                      0)
+                  (< (aref c i)
+                     r))))
+    (loop :for i :from 0 :to 2 :do
+       (unless (%check i)
+         (return-from inside-field? nil)))
+    t))
+
 (defmacro with-coordinates ((x y z) c-expr &body body)
   (alexandria:with-gensyms (c)
     `(let* ((,c ,c-expr)
@@ -119,6 +157,15 @@ a “box”."
            (if (= y1 y2) 1 0)
            (if (= z1 z2) 1 0))))))
 
-
+(defun region-points (r)
+  (let ((point-list nil))
+    (destructuring-bind (c1 c2) r
+      (with-coordinates (x1 y1 z1) c1
+        (with-coordinates (x2 y2 z2) c2
+          (loop :for i :from (min x1 x2) :to (max x1 x2) :do
+               (loop :for j :from (min y1 y2) :to (max y1 y2) :do
+                    (loop :for k :from (min z1 z2) :to (max z1 z2) :do
+                         (push (make-point i j k) point-list)))))))
+    point-list))
 
 

@@ -25,7 +25,7 @@
 (ql:quickload 'anaphora)
 (ql:quickload 'cl-fad)
 ;; (ql:quickload 'cl-cairo2)
-;; (ql:quickload 'cl-containers)
+(ql:quickload 'cl-containers)
 
 ;; (ql:quickload 'log4cl)
 ;; (ql:quickload 'closer-mop)

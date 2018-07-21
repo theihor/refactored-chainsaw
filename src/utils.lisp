@@ -2,7 +2,8 @@
     (:use :common-lisp)
   (:export
    #:copy-instance
-   #:copy-hash-table))
+   #:copy-hash-table
+   #:take))
 
 (in-package :src/utils)
 
@@ -24,6 +25,11 @@
                          v)))
              ht)
     new))
+
+(defun take (n lst &optional acc)
+  (if (and lst (> n 0))
+      (take (1- n) (cdr lst) (cons (car lst) acc))
+      acc))
 
 #+sbcl(defun cl-user::sbcl-print-callgraph-in-dot-format (file &key (min-percent 0.5))
         "Pring profile information in the form of the graph to the specified file.
