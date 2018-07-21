@@ -27,10 +27,10 @@
 ;; coordinate is an array of three elements #(x y z)
 
 (defconstant +dimensions+ 3)
-(deftype point () `(simple-array (unsigned-byte 9) (,+dimensions+)))
+(deftype point () `(simple-array fixnum (,+dimensions+)))
 
 (defun make-point (c1 c2 c3)
-  (make-array 3 :element-type '(signed-byte 9) :initial-contents (list c1 c2 c3)))
+  (make-array 3 :element-type 'fixnum :initial-contents (list c1 c2 c3)))
 
 ;;(deftype region () ???)
 
@@ -42,7 +42,7 @@
   (aops:each #'+ c1 c2))
 
 (defun copy-point (p)
-  (make-array 3 :element-type '(unsigned-byte 8) :initial-contents p))
+  (make-array 3 :element-type 'fixnum :initial-contents p))
 
 (defun pos-diff (c1 c2)
   "A coordinate difference d specifies the relative position of one coordinate
