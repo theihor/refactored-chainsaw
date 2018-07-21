@@ -3,7 +3,8 @@
   (:use :common-lisp :anaphora
         :src/state
         :src/execution
-        :src/model)
+        :src/model
+        :src/tracer)
   (:import-from :src/commands
                 #:read-trace-from-file))
 
@@ -41,8 +42,7 @@
 		            ((string= "-f" o) (push v files)))))
 	          (alexandria:plist-alist (cdr parsed-args)))
       (format t "~A~%" files)
-      (let ((result-list nil))
-	    (dolist (f (reverse files))
-	      (when (probe-file f)
-            (format *error-output* "Processing file ~A~%" f)))))))
+      (dolist (f (reverse files))
+	(when (probe-file f)
+          (format *error-output* "Processing file ~A~%" f))))))
 
