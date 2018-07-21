@@ -305,6 +305,23 @@
          (> (length (bot-seeds bot)) (m cmd)) ;; N >= M + 1
          )))
 
+(defmethod execute ((cmd fission) (state state) bot)
+  (let* ((bpos (bot-pos bot))
+         (nbpos (pos-add bpos (nd cmd)))
+         (seed (car (bot-seeds bot)))
+         (rest-seeds (cdr (bot-seeds bot)))
+         (m (m cmd))
+         (new-seeds (subseq rest-seeds 0 m))
+         (old-seeds (subseq rest-seeds m (length rest-seeds)))
+         (new-bot (make-instance 'nanobot
+                                 :bid seed
+                                 :pos nbpos
+                                 :seeds new-seeds)))
+    (setf (bot-seeds bot) old-seeds)
+    (push new-bot (state-bots state))
+    (setf (state-energy state) (+ (state-energy state) 24))
+    state))
+
 ;;Fill
 (defclass fill (singleton)
   ((nd :accessor nd :initarg :nd)))
@@ -358,6 +375,17 @@
 (defmethod check-preconditions ((cmd fusionp) (state state) bots)
   (check-preconditions-fussion state bots))
 
+(defmethod execute ((cmd fusionp) (state state) bot)
+  (let* ((bpos (bot-pos bot))
+         (nbpos (pos-add bpos (nd cmd)))
+         (sbot (find-if (lambda (b)
+                          (pos-eq (bot-pos b) nbpos))
+                        (state-bots state))))
+    (setf (state-bots state) (remove sbot (state-bots state)))
+    (setf (bot-seeds bot) (append (bot-seeds sbot) (bot-seeds bot)))
+    (setf (state-energy state) (- (state-energy state) 24))
+    state))
+
 ;;Fusions
 (defclass fusions (group)
   ((nd :accessor nd :initarg :nd)))
@@ -371,3 +399,6 @@
 
 (defmethod check-preconditions ((cmd fusions) (state state) bots)
   (check-preconditions-fussion state bots))
+
+(defmethod execute ((cmd fusions) (state state) bot)
+  state)
