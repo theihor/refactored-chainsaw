@@ -18,5 +18,4 @@
   )
 
 (defmethod generate-trace ((tracer (eql :parallel)) model)
-  ;; TODO(whythat): implement
   )
