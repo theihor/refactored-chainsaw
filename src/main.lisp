@@ -4,7 +4,8 @@
         :src/state
         :src/execution
         :src/model
-        :src/tracer)
+        :src/tracer
+        :src/trivial)
   (:import-from :src/commands
                 #:read-trace-from-file)
   (:export
