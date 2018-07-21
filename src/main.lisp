@@ -1,24 +1,47 @@
 (defpackage :src/main
   (:nicknames :main)
   (:use :common-lisp :anaphora
-        :src/execution))
+        :src/state
+        :src/execution
+        :src/model)
+  (:import-from :src/commands
+                #:read-trace-from-file))
 
 (in-package :src/main)
 
-(defun main () 
+(defun execute-trace-on-model (model trace)
+  (let* ((r (model-resolution model))
+         (bot (make-instance 'nanobot
+                             :bid 1
+                             :pos #(0 0 0)
+                             :seeds (loop :for i :from 2 :to 20 :collect i)))
+         (state (make-state
+                :r r
+                :matrix (make-array (* r r r)
+                                    :element-type 'bit
+                                    :initial-element 0)
+                :trace trace)))
+    (execute-state-trace state)))
+
+(defun load-and-execute (model-file trace-file)
+  (let ((model (read-model-from-file model-file))
+        (trace (read-trace-from-file trace-file)))
+    (execute-trace-on-model model trace)))
+
+(defun main ()
   (when sb-ext:*posix-argv*
     (let* ((parsed-args (apply-argv:parse-argv* sb-ext:*posix-argv*))
-	   (files))
+	       (files))
       (format t "~A~%~A~%" parsed-args (alexandria:plist-alist (cdr parsed-args)))
       (mapcar (lambda (p)
-		(let ((o (string (car p)))
-		      (v (cdr p)))
-		  (cond
-		    ((string= "-f" o) (push v files)))))
-	      (alexandria:plist-alist (cdr parsed-args)))
+		        (let ((o (string (car p)))
+		              (v (cdr p)))
+		          (cond
+		            ((string= "-f" o) (push v files)))))
+	          (alexandria:plist-alist (cdr parsed-args)))
       (format t "~A~%" files)
       (let ((result-list nil))
-	(dolist (f (reverse files))			
-	  (when (probe-file f)
+	    (dolist (f (reverse files))
+	      (when (probe-file f)
             (format *error-output* "Processing file ~A~%" f)))))))
 

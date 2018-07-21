@@ -17,6 +17,7 @@
    ;; command operations
    #:encode-commands
    #:decode-commands
+   #:read-trace-from-file
    ;; command accessors
    #:nd
 
@@ -150,6 +151,10 @@
                     ((= (logand b #b00000111) #b00000011) ; fill
                      (let ((nd (ash (logand b #b11111000) -3)))
                        (make-instance 'fill :nd (decode-nd nd)))))))
+
+(defun read-trace-from-file (filename)
+  (with-open-file (stream filename :element-type '(unsigned-byte 8))
+    (decode-commands stream)))
 
 (defun encode-commands (commands)
   "Encode commands and return octet vector."

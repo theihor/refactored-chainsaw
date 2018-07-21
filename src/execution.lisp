@@ -9,11 +9,33 @@
 
 (in-package :src/execution)
 
+(defun well-formed? (s gs)
+  (and (if (eq (state-harmonics s) :low)
+           (grounded-check gs)
+           t)
+       (loop :for (b . rest) :on (state-bots s) :do
+            (unless (every (lambda (b1)
+                             (and (not (= (bot-bid b1)
+                                          (bot-bid b)))
+                                  (not (pos-eq (bot-pos b1)
+                                               (bot-pos b)))))
+                           rest)
+              (return-from well-formed? nil))
+            (every (lambda (seed)
+                     (not (member seed (state-bots s) :key #'bot-bid :test #'=)))
+                   (bot-seeds b))
+            (loop :for (s . s-rest) :on (bot-seeds b) :do
+                 (unless (every (lambda (s1) (not (= s1 s)))
+                                s-rest)
+                   (return-from well-formed? nil))))))
+
 (defun execute-state-trace (state)
-  (assert (well-formed? state))
   (let ((gs (make-instance 'grounded-state)))
-    (loop :while (state-bots state) :do
-         (execute-one-step state gs)))
+    (loop :for i :from 1
+       :while (state-bots state) :do
+         (assert (well-formed? state gs))
+         (execute-one-step state gs)
+         (format t "Energy at step ~A: ~A~%" i (state-energy state))))
   state)
 
 (defun group-bots (bot-command-alist)

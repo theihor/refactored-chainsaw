@@ -3,6 +3,8 @@
           :src/coordinates
           :src/state)
   (:export
+   #:model-resolution
+   
    #:read-model
    #:read-model-from-file
    #:read-models-in-dir))
