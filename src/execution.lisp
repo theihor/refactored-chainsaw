@@ -122,10 +122,11 @@
 
       (loop :for group :in groups :do
            (loop :for (bot . cmd) :in group :do
-                (execute cmd bot state)))
+                (execute cmd state bot)))
 
-      (loop :for (bot . cmd) :in (alexandria:flatten groups) :do
-           (when (typep cmd 'src/commands:fill)
-             (grounded-add-voxel gs (pos-add (bot-pos bot) (nd cmd)) state)))
+      (loop :for group :in groups :do
+           (loop :for (bot . cmd) :in group :do
+                (when (typep cmd 'src/commands:fill)
+                  (grounded-add-voxel gs (pos-add (bot-pos bot) (nd cmd)) state))))
 
       (setf trace (nthcdr n trace)))))
