@@ -2,7 +2,11 @@
     (:use :common-lisp
           :src/coordinates
           :src/state)
-  (:import-from :alexandria))
+  (:use :src/commands
+        :src/model)
+  (:import-from :alexandria)
+  (:shadowing-import-from :src/commands
+                          #:fill))
 
 (in-package :src/path)
 
@@ -44,7 +48,7 @@
                  (setf (aref delta component) (* iter sign))
                  (let ((c1 (pos-add coord delta)))
                    (when (funcall check-func c1)
-                     (funcall c1 iter component)
+                     (funcall func c1 iter component)
                      (%one-dir c1 component (1+ iter) sign num-moves func))))))
            (%try-l-move (coord component)
              (loop :for sign :in '(-1 1)
@@ -76,11 +80,15 @@
                (let ((new-front nil))
                  (loop :for coord :in coords
                     :do (if (gethash coord targets)
-                            (return (cdr (reverse (gethash wave coord))))
+                            (return
+                              (values
+                               coord
+                               (cdr (reverse (gethash coord wave)))))
                             (try-moves
                              coord
                              (lambda (coord1)
-                               (not (voxel-full? state coord1)))
+                               (and (inside-field? coord1 (state-r state))
+                                    (not (voxel-full? state coord1))))
                              (lambda (coord-list)
                                (let ((coord1 (car (last coord-list))))
                                  (when (null (gethash coord1 wave))
@@ -91,7 +99,7 @@
                  (when new-front
                    (%iter new-front)))))
       (setf (gethash coord wave)
-            :start)
+            (list :start))
       (%iter (list coord)))))
 
 (defun initial-to-fill-set (model)
@@ -115,15 +123,109 @@
              fill-set)
     tab))
 
-(defun update-to-fill (coord to-fill state model)
-  (remhash coord to-fill)
+(defun update-fill-set (coord fill-set state model)
+  (remhash coord fill-set)
   (mapc-adjacent
    coord (state-r state)
    (lambda (coord1)
      (when (and (voxel-full? model coord1)
                 (voxel-void? state coord1))
-       (setf (gethash coord1 to-fill) t)))))
+       (setf (gethash coord1 fill-set) t)))))
 
-;; (defun update-target-set (filled-coord target-set state model)
-;;   (remhash filled-coord to-fill)
-;;   )
+(defun remove-adj-from-target-set (coord fill-set target-set state)
+  (let ((still-target nil))
+    (mapc-adjacent coord (state-r state)
+                   (lambda (c1)
+                     (when (gethash c1 fill-set)
+                       (setf still-target t))))
+    (unless still-target
+      (remhash coord target-set))))
+
+(defun update-target-set (filled-coord fill-set target-set state)
+  (remhash filled-coord target-set)
+  (mapc-adjacent
+   filled-coord (state-r state)
+   (lambda (coord1)
+     (remove-adj-from-target-set coord1 fill-set target-set state)
+     (when (gethash coord1 fill-set)
+       (mapc-adjacent
+        coord1 (state-r state)
+        (lambda (coord2)
+          (unless (gethash coord2 fill-set)
+            (setf (gethash coord2 target-set) t))))))))
+
+(defun find-to-fill (coord fill-set state)
+  (mapc-adjacent
+   coord (state-r state)
+   (lambda (coord1)
+     (when (gethash coord1 fill-set)
+       (return-from find-to-fill coord1))))
+  nil)
+
+(defun moves-to-commands (moves)
+  (loop :for move :in moves
+     :collect (ecase (move-kind move)
+                (:strait (make-instance 'smove :lld (first (move-diffs move))))
+                (:l (make-instance 'lmove
+                                   :sld1 (first (move-diffs move))
+                                   :sld2 (second (move-diffs move)))))))
+
+(defun go-sucker (true-model)
+  (let* ((res-trace nil)
+         (bot-coord (make-point 0 0 0))
+         (model (make-pseudo-state-from-model true-model))
+         (r (state-r model))
+         (state (make-state :r r
+                            :harmonics :low
+                            :matrix (make-array (* r r r)
+                                                :element-type 'bit
+                                                :initial-element 0)
+                            :bots nil
+                            :trace nil))
+         (fill-set (initial-to-fill-set model))
+         (target-set (fill-set-to-target-set fill-set (state-r state))))
+    (labels ((%commands (commands)
+               (push commands res-trace))
+             (%halt ()
+               (%commands (list (make-instance 'halt))))
+             (%result ()
+               (alexandria:mappend #'identity (reverse res-trace)))
+             (%move-to (coord)
+               (let* ((tab (make-hash-table :test #'equalp))
+                      (dummy (setf (gethash coord tab) t))
+                      (moves (nth-value 1 (shortest-path bot-coord tab state))))
+                 (declare (ignore dummy))
+                 (%commands (moves-to-commands moves)))))
+      (loop
+         :do (let ((coord (find-to-fill bot-coord fill-set state)))
+               (if coord
+                   (progn
+                     (%commands (list (make-instance 'fill
+                                                     :nd (pos-diff coord bot-coord))))
+                     (fill-voxel state coord)
+                     (update-fill-set coord fill-set state model)
+                     (update-target-set coord fill-set target-set state))
+                   (if (= (hash-table-count target-set) 0)
+                       (return)
+                       (multiple-value-bind (goto-coord moves)
+                           (shortest-path bot-coord target-set state)
+                         (unless goto-coord
+                           (return)
+                           ;; (error "AAAAAA")
+                           )
+                         (%commands (moves-to-commands moves))
+                         (setf bot-coord coord))))))
+      (unless (pos-eq bot-coord (make-point 0 0 0))
+        (%move-to (make-point 0 0 0)))
+      (%halt)
+      (%result))))
+
+(defun simple-pathfinder (in-file res-file)
+  (let* ((true-model (read-model-from-file in-file))
+         (commands (go-sucker true-model)))
+    (with-open-file (stream res-file
+                            :direction :output
+                            :if-exists :supersede
+                            :if-does-not-exist :create
+                            :element-type '(unsigned-byte 8))
+      (write-sequence (encode-commands commands) stream))))
