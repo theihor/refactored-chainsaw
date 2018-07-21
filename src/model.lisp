@@ -4,6 +4,7 @@
   (:import-from :src/state
                 #:set-voxel-state
                 #:make-state)
+  (:import-from :bit-smasher)
   (:export
    #:model-resolution
 
@@ -109,10 +110,16 @@ Reads the first byte to determine the resolution. Then reads using 8 bit chunks.
   (let ((mdl (make-instance 'model)))
     (with-slots (resolution coordinates matrix) mdl
       (setf resolution (read-resolution stream))
-      (multiple-value-bind (coord-list m)
-          (read-coordinates resolution stream)
-        (setf coordinates coord-list)
-        (setf matrix m)))
+      (let ((byte-array (make-array (ceiling (* resolution resolution resolution) 8)
+                                    :element-type '(unsigned-byte 8))))
+        (read-sequence byte-array stream)
+        (let ((bit-array (reverse (bit-smasher:bits<- (reverse byte-array)))))
+          (setf matrix bit-array)))
+      ;; (multiple-value-bind (coord-list m)
+      ;;     (read-coordinates resolution stream)
+      ;;   (setf coordinates coord-list)
+      ;;   (setf matrix m))
+      )
     mdl))
 
 (defun read-model-from-file (filename)

@@ -276,7 +276,11 @@
   (let* ((bpos (bot-pos bot))
          (mbpos (pos-add bpos (sld1 cmd)))
          (nbpos (pos-add mbpos (sld2 cmd))))
-    (list (make-region bpos mbpos) (make-region mbpos nbpos))))
+    (list (make-region bpos mbpos)
+          (make-region
+           ;; Offset by 1 so these two regions do not interfere
+           (pos-add mbpos (ident-vec (sld2 cmd)))
+           nbpos))))
 
 (defmethod check-preconditions ((cmd lmove) (state state) bots)
   (let* ((bot (car bots))

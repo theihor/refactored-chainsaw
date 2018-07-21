@@ -16,7 +16,8 @@
            #:with-coordinates
            #:inside-field?
            #:mapc-adjacent
-           #:+dimensions+))
+           #:+dimensions+
+           #:ident-vec))
 
 (in-package :src/coordinates)
 
@@ -39,7 +40,7 @@
 
 (defun pos-add (c1 c2)
   "Adds two coordinates"
-  (aops:each #'+ c1 c2))
+  (aops:each* 'fixnum #'+ c1 c2))
 
 (defun copy-point (p)
   (make-array 3 :element-type 'fixnum :initial-contents p))
@@ -49,7 +50,7 @@
 to another and is written <dx, dy, dz>, where dx, dy, and dz are (positive or
 negative) integers. Adding distance d = <dx, dy, dz> to coordinate c = <x, y,
 z>, written c + d, yields the coordinate <x + dx, y + dy, z + dz>."
-  (aops:each #'- c1 c2))
+  (aops:each* 'fixnum #'- c1 c2))
 
 (defun pos-eq (c1 c2)
   (equalp c1 c2))
@@ -80,6 +81,13 @@ length of a coordinate difference is always a non-negative integer."
                         (+ d (aref c1 component)))
                   (when (inside-field? c1 r)
                     (funcall func c1))))))
+
+(defun ident-vec (coord)
+  (labels ((%one (val)
+             (signum val)))
+    (with-coordinates (x y z)
+        coord
+      (make-point (%one x) (%one y) (%one z)))))
 
 (defun diff-linear? (diff)
   (let ((linear nil))
