@@ -120,16 +120,61 @@
                 (setf dx 0) (setf dy 0) (setf dz 0))))))
     (reverse moves)))
 
-(defun compute-model-bounding-box (model)
-  (with-slots (coordinates) model
-    (let ((x1 (apply #'min (mapcar (lambda (c) (aref c 0)) coordinates)))
-          (x2 (apply #'max (mapcar (lambda (c) (aref c 0)) coordinates)))
-          (y1 (apply #'min (mapcar (lambda (c) (aref c 1)) coordinates)))
-          (y2 (apply #'max (mapcar (lambda (c) (aref c 1)) coordinates)))
-          (z1 (apply #'min (mapcar (lambda (c) (aref c 2)) coordinates)))
-          (z2 (apply #'max (mapcar (lambda (c) (aref c 2)) coordinates))))
-      (make-region (make-point x1 y1 z1)
-                   (make-point x2 y2 z2)))))
+(defun compute-model-bounding-box (state)
+  (with-slots (r) state
+    (let ((r (1- r))
+          x1 y1 z1 x2 y2 z2)
+
+      (block x1-search
+        (loop :for i :from 0 :to r :do
+             (loop :for j :from 0 :to r :do
+                  (loop :for k :from 0 :to r :do
+                       (when (voxel-full? state (make-point i j k))
+                         (setf x1 i)
+                         (return-from x1-search))))))
+      (unless x1 (error "Model is without any full voxels"))
+
+      (block x2-search
+        (loop :for i :from r :downto 0 :do
+             (loop :for j :from 0 :to r :do
+                  (loop :for k :from 0 :to r :do
+                       (when (voxel-full? state (make-point i j k))
+                         (setf x2 i)
+                         (return-from x2-search))))))
+
+      (block y1-search
+        (loop :for j :from 0 :to r :do
+             (loop :for i :from 0 :to r :do
+                  (loop :for k :from 0 :to r :do
+                       (when (voxel-full? state (make-point i j k))
+                         (setf y1 j)
+                         (return-from y1-search))))))
+
+      (block y2-search
+        (loop :for j :from r :downto 0 :do
+             (loop :for i :from 0 :to r :do
+                  (loop :for k :from 0 :to r :do
+                       (when (voxel-full? state (make-point i j k))
+                         (setf y2 j)
+                         (return-from y2-search))))))
+
+      (block z1-search
+        (loop :for k :from 0 :to r :do
+             (loop :for i :from 0 :to r :do
+                  (loop :for j :from 0 :to r :do
+                       (when (voxel-full? state (make-point i j k))
+                         (setf z1 k)
+                         (return-from z1-search))))))
+
+      (block z2-search
+        (loop :for k :from r :downto 0 :do
+             (loop :for i :from 0 :to r :do
+                  (loop :for j :from 0 :to r :do
+                       (when (voxel-full? state (make-point i j k))
+                         (setf z2 k)
+                         (return-from z2-search))))))
+      (cons (make-point x1 y1 z1)
+            (make-point x2 y2 z2)))))
 
 (defmethod generate-trace ((tracer (eql :trivial)) model)
   (let ((state (src/model:make-pseudo-state-from-model model))
@@ -142,27 +187,32 @@
     (labels ((%move-to-and-fill (x y z)
                (let ((new-bot-pos (make-point x (1+ y) z))
                      (c (make-point x y z)))
-                 (when (voxel-void? state c)
+                 (when (voxel-full? state c)
                    (setf commands (append (reverse (moves-in-clear-space bot-pos new-bot-pos))
                                           commands))
                    (setf bot-pos new-bot-pos)
                    (push (make-instance 'fill :nd (make-point 0 -1 0)) commands)))))
-      (destructuring-bind (c1 . c2) (compute-model-bounding-box model)
+      (destructuring-bind (c1 . c2) (compute-model-bounding-box state)
         (with-coordinates (x1 y1 z1) c1
           (with-coordinates (x2 y2 z2) c2
             (loop :for y :from y1 :to y2 :do
-                 (loop :for x :from x1 :to x2 :do
-                      (if (oddp x)
-                          (loop :for z :from z1 :to z2 :do
-                               (%move-to-and-fill x y z))
-                          (loop :for z :from z2 :downto z1 :do
-                               (%move-to-and-fill x y z)))))))))
+                 (if (oddp y)
+                     (loop :for x :from x1 :to x2 :do
+                          (if (oddp x)
+                              (loop :for z :from z1 :to z2 :do
+                                   (%move-to-and-fill x y z))
+                              (loop :for z :from z2 :downto z1 :do
+                                   (%move-to-and-fill x y z))))
+                     (loop :for x :from x2 :downto x1 :do
+                          (if (oddp x)
+                              (loop :for z :from z1 :to z2 :do
+                                   (%move-to-and-fill x y z))
+                              (loop :for z :from z2 :downto z1 :do
+                                   (%move-to-and-fill x y z))))))))))
 
     (setf commands (append (reverse (moves-in-clear-space bot-pos #(0 0 0))) commands))
 
-    (when (eq (state-harmonics state) :high)
-      (push (make-instance 'flip) commands))
-
+    (push (make-instance 'flip) commands)
     (push (make-instance 'halt) commands)
 
     (reverse commands)))
