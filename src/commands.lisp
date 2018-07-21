@@ -171,6 +171,10 @@
          (eq (state-harmonics state) :low)
          (pos-eq (bot-pos bot) (make-point 0 0 0)))))
 
+(defmethod execute ((cmd halt) (state state) (bot nanobot))
+  (setf (state-bots state) nil)
+  state)
+
 ;; Wait
 (defclass wait (singleton) ())
 
@@ -184,6 +188,9 @@
 (defmethod check-preconditions ((cmd wait) (state state) bots)
   t)
 
+(defmethod execute ((cmd wait) (state state) (bot nanobot))
+  state)
+
 ;;Flip
 (defclass flip (singleton) ())
 
@@ -196,6 +203,12 @@
 
 (defmethod check-preconditions ((cmd flip) (state state) bots)
   t)
+
+(defmethod execute ((cmd flip) (state state) (bot nanobot))
+  (if (eq (state-harmonics state) :high)
+      (setf (state-harmonics state) :low)
+      (setf (state-harmonics state) :high))
+  state)
 
 ;;Smove
 (defclass smove (singleton)
@@ -217,6 +230,15 @@
          (region (make-region bpos nbpos)))
     (and (inside-field? nbpos (state-r state))
          (no-full-in-region state region))))
+
+(defmethod execute ((cmd smove) (state state) (bot nanobot))
+  (let* ((bpos (bot-pos bot))
+         (nbpos (pos-add bpos (lld cmd))))
+    (setf (bot-pos bot) nbpos)
+    (setf (state-energy state)
+          (+ (state-energy state)
+             (* 2 (mlen (lld cmd)))))
+    state))
 
 ;;Lmove 
 (defclass lmove (singleton)
@@ -247,6 +269,18 @@
          (inside-field? nbpos (state-r state))
          (no-full-in-region state region1)
          (no-full-in-region state region2))))
+
+(defmethod execute ((cmd lmove) (state state) bot)
+  (let* ((bpos (bot-pos bot))
+         (mbpos (pos-add bpos (sld1 cmd)))
+         (nbpos (pos-add mbpos (sld2 cmd))))
+    (setf (bot-pos bot) nbpos)
+    (setf (state-energy state)
+          (+ (state-energy state)
+             (* 2 (+ (mlen (sld1 cmd))
+                     (mlen (sld2 cmd))
+                     2))))
+    state))
 
 ;;Fission
 (defclass fission (singleton)
@@ -283,10 +317,22 @@
          (fpos (pos-add bpos (nd cmd))))
     (list (make-region bpos fpos))))
 
-(defmethod check-preconditions ((cmd fission) (state state) bots)
+(defmethod check-preconditions ((cmd fill) (state state) bots)
   (let* ((bpos (bot-pos (car bots)))
-         (nbpos (pos-add bpos (nd cmd))))
-    (inside-field? nbpos (state-r state))))
+         (fpos (pos-add bpos (nd cmd))))
+    (inside-field? fpos (state-r state))))
+
+(defmethod execute ((cmd fill) (state state) bot)
+  (let* ((bpos (bot-pos bot))
+         (fpos (pos-add bpos (nd cmd))))
+    (if (voxel-void? state fpos)
+        (progn
+          (fill-voxel state bpos)
+          (setf (state-energy state)
+                (+ (state-energy state) 12)))
+        (setf (state-energy state)
+              (+ (state-energy state) 6)))
+    state))
 
 ;;;------------------------------------------------------------------------------
 ;;; Group commands
