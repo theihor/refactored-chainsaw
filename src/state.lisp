@@ -1,9 +1,10 @@
-(defpackage :src/state
+(uiop:define-package :src/state
   (:use :common-lisp
         :src/coordinates)
   (:export #:well-formed?
            #:voxel-state
            #:set-voxel-state
+           #:get-voxel
 
            #:state
            #:state-energy
@@ -32,6 +33,9 @@
   (with-coordinates (x y z) c
     (let ((i (+ x (* r y) (* r r z))))
       (aref m i))))
+
+(defun get-voxel (state c)
+  (voxel-state c (state-matrix state) (state-r state)))
 
 (defun set-voxel-state (s c m r)
   (with-coordinates (x y z) c
