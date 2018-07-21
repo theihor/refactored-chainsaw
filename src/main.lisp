@@ -14,8 +14,10 @@
 
 (in-package :src/main)
 
-(defun execute-trace-on-model (model trace)
-  (let* ((r (model-resolution model))
+(defun execute-trace-on-model (model-file trace-file)
+  (let* ((model (read-model-from-file model-file))
+         (trace (read-trace-from-file trace-file))
+         (r (model-resolution model))
          (bot (make-instance 'nanobot
                              :bid 1
                              :pos #(0 0 0)
@@ -28,11 +30,6 @@
                             :bots (list bot)
                             :trace trace)))
     (execute-state-trace state)))
-
-(defun execute-trace-on-model (model-file trace-file)
-  (let ((model (read-model-from-file model-file))
-        (trace (read-trace-from-file trace-file)))
-    (execute-trace-on-model model trace)))
 
 (defun generate-trace-for-model (model-file tracer)
   "Load model from `model-file' and generate the trace for it

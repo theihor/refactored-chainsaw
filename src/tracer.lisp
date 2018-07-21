@@ -14,7 +14,7 @@
    on `tracer' type. Return list of command objects."))
 
 (defmethod generate-trace ((tracer (eql :trivial)) model)
-  ;; TODO(theihor): implemen
+  ;; TODO(theihor): implement
   )
 
 (defmethod generate-trace ((tracer (eql :parallel)) model)
