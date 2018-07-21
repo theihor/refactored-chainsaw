@@ -18,7 +18,7 @@
                    ((or fusionp fusions)
                     (let ((bot-cmd2 (find-if (lambda (b.c)
                                                (pos-eq (bot-pos (car b.c))
-                                                       (bot-pos bot)))
+                                                       (nd cmd)))
                                              alist)))
                       (push (list bot-cmd bot-cmd2) groups)
                       (setf alist (remove bot-cmd2 alist :test #'eq))))
@@ -42,13 +42,13 @@
 
     groups))
 
-(defun check-volatile-regions (region-groups r)
+(defun check-volatile-regions (region-groups)
   "`region-groups' is list of lists of regions "
   (let ((points (make-hash-table :test #'eq)))
     (loop :for region-group :in region-groups :do
          (loop :for region :in region-group :do
               (loop :for point :in (region-points region) :do
-                   (let ((i (matrix-index point r)))
+                   (let ((i (matrix-index point)))
                      (if (gethash i points)
                          (error "Volatile regions intersect: ~A~%"
                                 region-groups)
@@ -60,6 +60,10 @@
     (let* ((bots (sort #'< (copy-list (state-bots state)) :key #'bot-bid))
            (commands (take (length bots) commands))
            (groups (progn (assert (= (length commands) (length bots)))
-                          (group-bots (mapcar #'cons bots commands)))))
-      
+                          (group-bots (mapcar #'cons bots commands))))
+           (volatile-region-groups
+            (loop :for group :in groups :collect
+                 (loop :for (bot . cmd) :in group :append
+                      (get-volatile-regions cmd bot)))))
+      (check-volatile-regions volatile-region-groups)
       )))
