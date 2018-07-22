@@ -117,6 +117,15 @@ If voxel A is grounded because of several voxels, then build just a single edge 
          (dep-graph (cl-graph:make-graph 'cl-graph:graph-container)))
     (mark-0th-floor-grounded resolution matrix grounded-matrix dep-graph)
     (mark-grounded-bottom-up resolution matrix grounded-matrix dep-graph)
-    (mark-grounded-top-down resolution matrix grounded-matrix dep-graph)
+    ;; (mark-grounded-top-down resolution matrix grounded-matrix dep-graph)
     dep-graph))
 
+(defun traverse-vortextes-in-destruction-order (dep-graph)
+  "Traverses DEP-GRAPH in order that allows safe destruction in low mode"
+  (loop :for roots = (cl-graph:graph-roots dep-graph)
+     :while roots
+     :do
+     (dolist (root roots)
+       (format t "kill vertex ~A~%" root)
+       (cl-graph:delete-vertex dep-graph root)))
+  dep-graph)
