@@ -17,8 +17,7 @@
   (let* ((cmd-alist nil)
          (n (or n (length (bot-seeds bot))))
          (i 0) ;; number of spawned bots
-         (seeds (sort (copy-list (take n (bot-seeds bot))) #'<))
-         (bids (sort (cons (bot-bid bot) (copy-list seeds)) #'<)))
+         (seeds (sort (copy-list (take n (bot-seeds bot))) #'<)))
     ;; (format t "bids = ~A~%" bids)
     (loop :while seeds :do
          (push (cons (bot-bid bot) (make-instance 'fission
@@ -36,33 +35,19 @@
            (loop :for m :in moves :do
                 (push (cons bot1-bid m) cmd-alist))))
 
-    (let ((bot->cmds (make-hash-table :test #'eq))
-          (commands nil))
+    (let* ((bot->cmds (make-hash-table :test #'eq)))
+
       (loop :for (bid . cmd) :in cmd-alist :do
            (push cmd (gethash bid bot->cmds)))
 
-      (labels ((%print ()
-                 (format t "~%tab:~%")
-                 (maphash (lambda (bot cmds)
-                            (format t "~A: ~A~%" bot cmds))
-                          bot->cmds))
-               (%sort-cmd (bots)
-                 (loop :for bid :in bots :do
-                      (let ((cmd (pop (gethash bid bot->cmds))))
-                        (unless (gethash bid bot->cmds)
-                          (remhash bid bot->cmds))
-                        (if cmd
-                            (push cmd commands)
-                            (push (make-instance 'wait) commands))))))
-
-        (loop :for i :from 1 :to (1+ n) :do
-             (let ((bots (take i bids)))
-               (%sort-cmd bots)))
-
-        (loop :until (= (hash-table-count bot->cmds) 0) :do
-             (%sort-cmd (take (1+ n) bids))))
-
-      (reverse commands))))
+      (let* ((steps (apply #'max
+                           (mapcar #'length
+                                   (alexandria:hash-table-values bot->cmds))))
+             (init-count-lst (loop :for i :from 1 :to (1+ n) :collect i))
+             (count-list (append init-count-lst
+                                 (make-list (- steps (1+ n))
+                                            :initial-element (1+ n)))))
+        (sort-commands-for-bots bot->cmds count-list)))))
 
 ;; (defun spawn-in-line (bot region &key (n :all) (commands-acc nil) (spawned))
 ;;   "Generates  a sequence  of commands  to spawn  `n` bots  in `region'
