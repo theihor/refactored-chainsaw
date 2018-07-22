@@ -1,7 +1,15 @@
 all: clean
 	sbcl --load build.lisp "$@"
+
+build-best-traces: clean
+	sbcl --load build-get-best-traces.lisp "$@"
+
 clean:
 	rm -f main
+	rm -f get-best-traces
+
+best-traces: build-best-traces
+	./get-best-traces 
 
 ts := $(shell /bin/date "+%Y_%m_%d_%H_%M_%S")
 
