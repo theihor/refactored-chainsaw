@@ -4,63 +4,64 @@
   (:use :src/coordinates
         :src/state
         :src/commands
-        :src/model))
+        :src/model)
+  (:export #:moves-in-clear-space))
 
 (in-package :src/trivial)
 
-(defun get-shortest-path (p1 p2)
-  (let ((nd (pos-diff p2 p1)))
-    (let* ((x (aref p1 0))
-           (y (aref p1 1))
-           (z (aref p1 2))
-           (dx (aref nd 0))
-           (dy (aref nd 1))
-           (dz (aref nd 2))
-           (sorted (sort (list (cons :x dx) (cons :y dy) (cons :z dz))
-                         #'>
-                         :key (lambda (el) (abs (cdr el)))))
-           (sorted (remove-if (lambda (el) (= (cdr el) 0)) sorted)))
-      (when sorted
-        (let* ((fst (car sorted))
-               (fnum (cdr fst))
-               (fabs (abs fnum))
-               (fdim (car fst)))
-          (cond
-            ((or (> fabs 5)
-                 (/= (length sorted) 2))
-             (let ((step (min 15 fabs)))
-               (cons (list fdim (if (> fnum 0) step (- step)))
-                     (get-shortest-path
-                      (make-point
-                       (if (eq fdim :x) (+ x step) x)
-                       (if (eq fdim :y) (+ y step) y)
-                       (if (eq fdim :z) (+ z step) z))
-                      p2))))
-            (t (let* ((snd (second sorted))
-                      (snum (cdr snd))
-                      (sdim (car snd)))
-                 (cons (list fdim sdim fnum snum)
-                       nil)))))))))
+;; (defun get-shortest-path (p1 p2)
+;;   (let ((nd (pos-diff p2 p1)))
+;;     (let* ((x (aref p1 0))
+;;            (y (aref p1 1))
+;;            (z (aref p1 2))
+;;            (dx (aref nd 0))
+;;            (dy (aref nd 1))
+;;            (dz (aref nd 2))
+;;            (sorted (sort (list (cons :x dx) (cons :y dy) (cons :z dz))
+;;                          #'>
+;;                          :key (lambda (el) (abs (cdr el)))))
+;;            (sorted (remove-if (lambda (el) (= (cdr el) 0)) sorted)))
+;;       (when sorted
+;;         (let* ((fst (car sorted))
+;;                (fnum (cdr fst))
+;;                (fabs (abs fnum))
+;;                (fdim (car fst)))
+;;           (cond
+;;             ((or (> fabs 5)
+;;                  (/= (length sorted) 2))
+;;              (let ((step (min 15 fabs)))
+;;                (cons (list fdim (if (> fnum 0) step (- step)))
+;;                      (get-shortest-path
+;;                       (make-point
+;;                        (if (eq fdim :x) (+ x step) x)
+;;                        (if (eq fdim :y) (+ y step) y)
+;;                        (if (eq fdim :z) (+ z step) z))
+;;                       p2))))
+;;             (t (let* ((snd (second sorted))
+;;                       (snum (cdr snd))
+;;                       (sdim (car snd)))
+;;                  (cons (list fdim sdim fnum snum)
+;;                        nil)))))))))
 
-(defun gen-move-commands (c1 c2)
-  (let ((moves (get-shortest-path c1 c2)))
-    (loop :for move :in moves :collect
-         (ecase (length move)
-           (2 (make-instance 'smove
-                             :lld (ecase (first move)
-                                    (:x (make-point (second move) 0 0))
-                                    (:y (make-point 0 (second move) 0))
-                                    (:z (make-point 0 0 (second move))))))
-           (4 (make-instance 'lmove
-                             :sld1 (ecase (first move)
-                                     (:x (make-point (third move) 0 0))
-                                     (:y (make-point 0 (third move) 0))
-                                     (:z (make-point 0 0 (third move))))
-                             :sld2 (ecase (second move)
-                                     (:x (make-point (fourth move) 0 0))
-                                     (:y (make-point 0 (fourth move) 0))
-                                     (:z (make-point 0 0 (fourth move))))
-                             ))))))
+;; (defun gen-move-commands (c1 c2)
+;;   (let ((moves (get-shortest-path c1 c2)))
+;;     (loop :for move :in moves :collect
+;;          (ecase (length move)
+;;            (2 (make-instance 'smove
+;;                              :lld (ecase (first move)
+;;                                     (:x (make-point (second move) 0 0))
+;;                                     (:y (make-point 0 (second move) 0))
+;;                                     (:z (make-point 0 0 (second move))))))
+;;            (4 (make-instance 'lmove
+;;                              :sld1 (ecase (first move)
+;;                                      (:x (make-point (third move) 0 0))
+;;                                      (:y (make-point 0 (third move) 0))
+;;                                      (:z (make-point 0 0 (third move))))
+;;                              :sld2 (ecase (second move)
+;;                                      (:x (make-point (fourth move) 0 0))
+;;                                      (:y (make-point 0 (fourth move) 0))
+;;                                      (:z (make-point 0 0 (fourth move))))
+;;                              ))))))
 
 (defun moves-in-clear-space (c1 c2)
   (let ((diff (pos-diff c2 c1))
@@ -178,11 +179,40 @@
 
 (defmethod generate-trace ((tracer (eql :trivial)) model)
   (let ((state (src/model:make-pseudo-state-from-model model))
-        (commands nil)
-        (bot-pos #(0 0 0)))
+        (commands nil))
 
     (when (eq (state-harmonics state) :low)
       (push (make-instance 'flip) commands))
+
+    (let* ((region (compute-model-bounding-box state)))
+      (loop :for move :in (moves-in-clear-space #(0 0 0) (car region)) :do
+           (push move commands))
+      (multiple-value-bind (moves-and-fills bot-pos)
+          (generate-trivial-trace-for-region state region)
+        ;; (format t "bot-pos after filling: ~A~%" bot-pos)
+        ;; (format t "moves to ~A: ~A~%"
+        ;;         (make-point 0 (aref bot-pos 1) 0)
+        ;;         (moves-in-clear-space bot-pos (make-point 0 (aref bot-pos 1) 0)))
+        ;; (format t "moves to ~A: ~A~%"
+        ;;         (make-point 0 0 0)
+        ;;         (moves-in-clear-space (make-point 0 (aref bot-pos 1) 0) #(0 0 0)))
+        (loop :for m :in (append
+                          moves-and-fills
+                          (moves-in-clear-space
+                           bot-pos (make-point 0 (aref bot-pos 1) 0))
+                          (moves-in-clear-space
+                           (make-point 0 (aref bot-pos 1) 0) #(0 0 0)))
+           :do (push m commands))
+
+        (push (make-instance 'flip) commands)
+        (push (make-instance 'halt) commands)
+
+        (reverse commands)))))
+
+(defun generate-trivial-trace-for-region (state region)
+  "Assumes bot to be already in c1 of `region' and state with :high `harmonics'"
+  (let ((commands nil)
+        (bot-pos (car region)))
 
     (labels ((%move-to-and-fill (x y z)
                (let ((new-bot-pos (make-point x (1+ y) z))
@@ -192,7 +222,8 @@
                                           commands))
                    (setf bot-pos new-bot-pos)
                    (push (make-instance 'fill :nd (make-point 0 -1 0)) commands)))))
-      (destructuring-bind (c1 . c2) (compute-model-bounding-box state)
+
+      (destructuring-bind (c1 . c2) region
         (with-coordinates (x1 y1 z1) c1
           (with-coordinates (x2 y2 z2) c2
             (loop :for y :from y1 :to y2 :do
@@ -210,12 +241,7 @@
                               (loop :for z :from z2 :downto z1 :do
                                    (%move-to-and-fill x y z))))))))))
 
-    (setf commands (append (reverse (moves-in-clear-space bot-pos #(0 0 0))) commands))
-
-    (push (make-instance 'flip) commands)
-    (push (make-instance 'halt) commands)
-
-    (reverse commands)))
+    (values (reverse commands) bot-pos)))
 
 (defun trivial-tracer (in-file out-file)
   (let* ((model (read-model-from-file in-file))

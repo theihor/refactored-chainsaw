@@ -146,6 +146,7 @@ length of a coordinate difference is always a non-negative integer."
             (,x (aref ,c 0))
             (,y (aref ,c 1))
             (,z (aref ,c 2)))
+       (declare (ignorable ,x ,y ,z))
        ,@body)))
 
 (defun mapc-near (c r func)

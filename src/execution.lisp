@@ -12,7 +12,7 @@
 
 (defun well-formed? (s gs)
   (and (if (eq (state-harmonics s) :low)
-           (grounded-check gs)
+           (if (not (grounded-check gs)) (error "NOT GROUNDED") t)
            t)
        (progn
          (loop :for (b . rest) :on (state-bots s) :do
@@ -39,7 +39,8 @@
        :while (state-bots state) :do
          (assert (well-formed? state gs))
          (execute-one-step state gs)
-         (format t "Energy at step ~A: ~A~%" i (state-energy state))))
+         (when (> i 1000) (format t "bot-pos ~A: ~A~%" i (bot-pos (first (state-bots state)))))))
+  (format t "Energy at the end of simulation: ~A~%" (state-energy state))
   state)
 
 (defun group-bots (bot-command-alist)
