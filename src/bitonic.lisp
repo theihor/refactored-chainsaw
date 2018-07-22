@@ -3,7 +3,9 @@
           :src/coordinates
           :src/state
           :src/wave-model
-          :src/model)
+          :src/model
+          :src/tracer
+          :src/commands)
   (:import-from :cl-containers)
   (:import-from :src/layered-bot
                 #:a-star-path-to-dest)
@@ -269,5 +271,8 @@
       (%halt)
       (%result))))
 
-(defmethod generate-trace ((tracer (eql :simple-bitonic)) model)
-  (bitonic-bot model))
+(defmethod generate-trace ((tracer (eql :simple-bitonic))
+                           (task-type (eql :assembly))
+                           src-model
+                           tgt-model)
+  (bitonic-bot tgt-model))
