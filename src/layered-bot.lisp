@@ -131,19 +131,23 @@
       (cl-heap:enqueue point-queue start-coord 0)
       (%loop))))
 
-(defun a-star-path-to-dest (start-coord target-coord state)
+(defun a-star-path-to-dest (start-coord target-coord state &key near)
   (let ((wave (make-hash-table :test #'equalp))
         (point-queue (make-instance 'cl-heap:priority-queue)))
     (labels ((%prioroty (coord)
                (+ (length (gethash coord wave))
                   (truncate (diff-lens target-coord coord)
                             15)))
+             (%found? (coord)
+               (if near
+                   (near? coord target-coord)
+                   (pos-eq coord target-coord)))
              (%loop ()
                (loop
                   :do
                   (let ((coord (cl-heap:dequeue point-queue)))
                     (if coord
-                        (if (pos-eq coord target-coord)
+                        (if (%found? coord)
                             (return (values coord
                                             (cdr (reverse (gethash coord wave)))))
                             (progn
