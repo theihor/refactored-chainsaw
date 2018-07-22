@@ -417,17 +417,17 @@
 (defmethod encode-command ((cmd void))
   (%bytes 1 (logior #b00000010 (ash (encode-nd (nd cmd)) 3))))
 
-(defmethod get-volatile-regions ((cmd fill) (bot nanobot))
+(defmethod get-volatile-regions ((cmd void) (bot nanobot))
   (let* ((bpos (bot-pos bot))
          (fpos (pos-add bpos (nd cmd))))
     (list (make-region bpos fpos))))
 
-(defmethod check-preconditions ((cmd fill) (state state) bots)
+(defmethod check-preconditions ((cmd void) (state state) bots)
   (let* ((bpos (bot-pos (car bots)))
          (fpos (pos-add bpos (nd cmd))))
     (inside-field? fpos (state-r state))))
 
-(defmethod execute ((cmd fill) (state state) bot)
+(defmethod execute ((cmd void) (state state) bot)
   (let* ((bpos (bot-pos bot))
          (fpos (pos-add bpos (nd cmd))))
     (if (voxel-full? state fpos)

@@ -46,9 +46,9 @@
   (with-slots (uf-container coords)
       gs
     (let ((coords-to-check coords))
-      (setf coords nil)
       (loop :for coord :in coords-to-check
          :do (unless (eq (cl-containers:representative-node uf-container coord)
                          (cl-containers:representative-node uf-container :ground))
-               (return-from grounded-check nil))))
+               (return-from grounded-check nil)))
+      (setf coords nil))
     t))
