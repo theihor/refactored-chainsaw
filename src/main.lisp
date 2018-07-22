@@ -137,17 +137,14 @@
 		(let ((o (string (car p)))
 		      (v (cdr p)))
 		  (cond
-		    ((string= "-s" o) (setf v src-file))
-		    ((string= "-t" o) (setf v tgt-file)))))
+		    ((string= "-s" o) (setf src-file v))
+		    ((string= "-t" o) (setf tgt-file v)))))
 	      (alexandria:plist-alist (cdr parsed-args)))
-      (generate-trace-for-model :assembly nil tgt-file nil)
       (if (and src-file tgt-file)
-      	  (generate-trace-for-model :reassembly src-file tgt-file :trivial-low) ;;TODO: Insert needed tracer
+      	  (generate-trace-for-model :reassembly src-file tgt-file :trivial-low)
       	  (if src-file
-      	      (generate-trace-for-model :disassembly src-file nil :trivial-low) ;;TODO: Insert needed tracer
-      	      (generate-trace-for-model :assembly nil tgt-file :trivial-low)))
-      ;;TODO: Insert needed tracer
-      )))
+      	      (generate-trace-for-model :disassembly src-file nil :trivial-low)
+      	      (generate-trace-for-model :assembly nil tgt-file :trivial-low))))))
 
 (defun get-best-traces ()
   (let ((best-res (make-hash-table :test #'equal)))
