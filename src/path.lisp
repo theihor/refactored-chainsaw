@@ -186,14 +186,14 @@
 
 (defun update-fill-set (coord fill-set state model)
   (remhash coord fill-set)
-  (mapc-near
+  (mapc-adjacent
    coord (state-r state)
    (lambda (coord1)
      (when (and (voxel-full? model coord1)
                 (voxel-void? state coord1))
        (setf (gethash coord1 fill-set) t)))))
 
-(defun remove-adj-from-target-set (coord fill-set target-set state)
+(defun remove-near-from-target-set (coord fill-set target-set state)
   (let ((still-target nil))
     (mapc-near coord (state-r state)
                (lambda (c1)
@@ -207,7 +207,7 @@
   (mapc-near
    filled-coord (state-r state)
    (lambda (coord1)
-     (remove-adj-from-target-set coord1 fill-set target-set state)
+     (remove-near-from-target-set coord1 fill-set target-set state)
      (when (gethash coord1 fill-set)
        (one-target-fill dir coord1 fill-set target-set state)))))
 
@@ -258,11 +258,12 @@
                  (%commands (moves-to-commands moves)))))
       (loop
          :do (progn
+               (format t "Step: ~A~%" (reduce #'+ (mapcar #'length res-trace)))
                (format t "Bot: ~A~%" bot-coord)
-               ;; (format t "Fill set: ~A~%" (alexandria:hash-table-keys fill-set))
-               ;; (format t "Target set: ~A~%" (alexandria:hash-table-keys (trg-set-tab target-set)))
+               (format t "Fill set: ~A~%" (alexandria:hash-table-keys fill-set))
+               (format t "Target set: ~A~%" (alexandria:hash-table-keys (trg-set-tab target-set)))
                (let ((coord (find-to-fill dir bot-coord fill-set state)))
-                 ;; (format t "Can fill coord: ~A~%" coord)
+                 (format t "Can fill coord: ~A~%" coord)
                  (if coord
                      (progn
                        (%commands (list (make-instance 'fill

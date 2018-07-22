@@ -111,6 +111,10 @@ length of a coordinate difference is always a non-negative integer."
   (and (<= (mlen diff) 2)
        (= (clen diff) 1)))
 
+(defun near? (c1 c2)
+  (let ((d (pos-diff c1 c2)))
+    (diff-near? d)))
+
 ;; region is a cons of two coordinates (c1 . c2)
 
 (defun in-region (c r)
@@ -157,7 +161,7 @@ length of a coordinate difference is always a non-negative integer."
                                                (+ y dy)
                                                (+ z dz))))
                            (when (and
-                                  (adjacent? c c1)
+                                  (near? c c1)
                                   (inside-field? c1 r))
                              (funcall func c1))))))))
 
