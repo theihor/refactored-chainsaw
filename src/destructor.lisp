@@ -106,6 +106,51 @@ TEST-FN and ACTION-FN have type (coordinate -> matrix -> resolution -> ())"
   (loop :for y :from (1- resolution) :downto 1 :do
      (mark-non-0-floor-grounded y matrix resolution grounded-matrix dep-graph)))
 
+(defun is-grounded (index grounded-matrix)
+  (= (aref grounded-matrix index) +grounded+))
+
+(defconstant +visited+ 1)
+(defun is-visited (index visited-matrix)
+  (= (aref visited-matrix index) +visited+))
+
+(defun is-full (index matrix)
+  (= (aref matrix index) +full+))
+
+(defun mark-coordinates-as-grounded(roots matrix grounded-matrix visited-matrix resolution dep-graph)
+  ;; ROOTS are coordinates
+  (when roots
+    (let (future-roots)
+      (dolist (root roots)
+        (let ((root-index (matrix-index root resolution)))
+          (mapc-adjacent
+           root
+           resolution
+           (lambda (neighbour-coordinate)
+             (let ((neighbour-index
+                    (matrix-index neighbour-coordinate resolution)))
+               (when (and (is-full neighbour-index matrix)
+                          (not (is-visited neighbour-index visited-matrix)))
+                 (setf (aref grounded-matrix neighbour-index) +grounded+)
+                 (setf (aref visited-matrix neighbour-index) +visited+)
+                 (push neighbour-coordinate future-roots)
+                 (cl-graph:add-vertex dep-graph neighbour-index)
+                 (cl-graph:add-edge-between-vertexes dep-graph neighbour-index root-index)))))))
+      (mark-coordinates-as-grounded future-roots matrix grounded-matrix visited-matrix resolution dep-graph))))
+
+(defun visit-0th-floor (matrix grounded-matrix visited-matrix resolution dep-graph)
+  (let (result)
+    (loop :for x :from 0 :below resolution :do
+       (loop :for z :from 0 :below resolution
+          :for coordinate = (make-point x 0 z)
+          :for index = (matrix-index coordinate resolution)
+          :do
+          (when (is-full index matrix)
+            (setf (aref grounded-matrix index) +grounded+)
+            (setf (aref visited-matrix index) +visited+)
+            (push coordinate result)
+            (cl-graph:add-vertex dep-graph index))))
+    result))
+
 (defun build-ground-dep-graph (model)
   "Builds ground dependence graph.
 Vertex A points to vertex B (A -> B) if voxel A is grounded because voxel B is grounded.
@@ -114,9 +159,18 @@ If voxel A is grounded because of several voxels, then build just a single edge 
          (resolution (model-resolution model))
          ;; Used to track grounded voxels
          (grounded-matrix (make-array (length matrix) :element-type 'bit))
-         (dep-graph (cl-graph:make-graph 'cl-graph:graph-container)))
-    (mark-0th-floor-grounded resolution matrix grounded-matrix dep-graph)
-    (mark-grounded-bottom-up resolution matrix grounded-matrix dep-graph)
-    (mark-grounded-top-down resolution matrix grounded-matrix dep-graph)
+         (visited-matrix (make-array (length matrix) :element-type 'bit))
+         (dep-graph (cl-graph:make-graph 'cl-graph:graph-container :default-edge-type :directed))
+         (roots (visit-0th-floor matrix grounded-matrix visited-matrix resolution dep-graph)))
+    (mark-coordinates-as-grounded roots matrix grounded-matrix visited-matrix resolution dep-graph)
     dep-graph))
 
+(defun traverse-vortextes-in-destruction-order (dep-graph)
+  "Traverses DEP-GRAPH in order that allows safe destruction in low mode"
+  (loop :for roots = (cl-graph:graph-roots dep-graph)
+     :while roots
+     :do
+     (dolist (root roots)
+       (format t "kill vertex ~A~%" root)
+       (cl-graph:delete-vertex dep-graph root)))
+  dep-graph)
