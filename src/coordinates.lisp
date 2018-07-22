@@ -19,6 +19,7 @@
            #:+dimensions+
            #:ident-vec
            #:mapc-near
+           #:diff-lens
            #:copy-point
            #:near?))
 

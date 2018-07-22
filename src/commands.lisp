@@ -12,19 +12,24 @@
    #:lmove
    #:fission
    #:fill
+   #:void
    #:fusionp
    #:fusions
+   #:gfill
+   #:gvoid
    ;; command operations
    #:encode-commands
    #:decode-commands
    #:read-trace-from-file
    ;; command accessors
    #:nd
+   #:fd
 
    #:get-volatile-regions
    #:check-preconditions
    #:execute
    #:check-preconditions
+   #:group-region
    ))
 
 (in-package :src/commands)
@@ -40,9 +45,12 @@
 (defclass group ()
   ())
 
+(defgeneric command-group (cmd bot state)
+  (:documentation "Return a group for group command `cmd' of a given `bot'."))
+
 (defgeneric encode-command (cmd))
 
-(defgeneric get-volatile-regions (cmd bot)
+(defgeneric get-volatile-regions (cmd state bot)
   (:documentation "Return list of regions with volatile points"))
 
 (defgeneric check-preconditions (cmd state bots)
@@ -206,17 +214,17 @@
 (defmethod encode-command ((cmd halt))
   (%bytes 1 #b11111111))
 
-(defmethod get-volatile-regions ((cmd halt) (bot nanobot))
-  (let ((bpos (bot-pos bot)))
+(defmethod get-volatile-regions ((cmd halt) (state state) group)
+  (let ((bpos (bot-pos (car (first group)))))
     (list (make-region bpos bpos))))
 
-(defmethod check-preconditions ((cmd halt) (state state) bots)
-  (let ((bot (car bots)))
+(defmethod check-preconditions ((cmd halt) (state state) group)
+  (let ((bot (car (first group))))
     (and (null (cdr (state-bots state)))
          (eq (state-harmonics state) :low)
          (pos-eq (bot-pos bot) (make-point 0 0 0)))))
 
-(defmethod execute ((cmd halt) (state state) (bot nanobot))
+(defmethod execute ((cmd halt) (state state) group)
   (setf (state-bots state) nil)
   state)
 
@@ -226,36 +234,36 @@
 (defmethod encode-command ((cmd wait))
   (%bytes 1 #b11111110))
 
-(defmethod get-volatile-regions ((cmd wait) (bot nanobot))
-  (let ((bpos (bot-pos bot)))
+(defmethod get-volatile-regions ((cmd wait) (state state) group)
+  (let ((bpos (bot-pos (car (first group)))))
     (list (make-region bpos bpos))))
 
 (defmethod check-preconditions ((cmd wait) (state state) bots)
   t)
 
-(defmethod execute ((cmd wait) (state state) (bot nanobot))
+(defmethod execute ((cmd wait) (state state) group)
   state)
 
-;;Flip
+;; Flip
 (defclass flip (singleton) ())
 
 (defmethod encode-command ((cmd flip))
   (%bytes 1 #b11111101))
 
-(defmethod get-volatile-regions ((cmd flip) (bot nanobot))
-  (let ((bpos (bot-pos bot)))
+(defmethod get-volatile-regions ((cmd flip) (state state) group)
+  (let ((bpos (bot-pos (car (first group)))))
     (list (make-region bpos bpos))))
 
-(defmethod check-preconditions ((cmd flip) (state state) bots)
+(defmethod check-preconditions ((cmd flip) (state state) group)
   t)
 
-(defmethod execute ((cmd flip) (state state) (bot nanobot))
+(defmethod execute ((cmd flip) (state state) group)
   (if (eq (state-harmonics state) :high)
       (setf (state-harmonics state) :low)
       (setf (state-harmonics state) :high))
   state)
 
-;;Smove
+;; Smove
 (defclass smove (singleton)
   ((lld :accessor lld :initarg :lld)))
 
@@ -270,21 +278,22 @@
   (multiple-value-bind (a i) (encode-lld (lld cmd))
     (%bytes 2 (logior #b00000100 (ash a 4)) (logior #b00000000 i))))
 
-(defmethod get-volatile-regions ((cmd smove) (bot nanobot))
-  (let* ((bpos (bot-pos bot))
+(defmethod get-volatile-regions ((cmd smove) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (nbpos (pos-add bpos (lld cmd))))
     (list (make-region bpos nbpos))))
 
-(defmethod check-preconditions ((cmd smove) (state state) bots)
-  (let* ((bot (car bots))
+(defmethod check-preconditions ((cmd smove) (state state) group)
+  (let* ((bot (car (first group)))
          (bpos (bot-pos bot))
          (nbpos (pos-add bpos (lld cmd)))
          (region (make-region bpos nbpos)))
     (and (inside-field? nbpos (state-r state))
          (no-full-in-region state region))))
 
-(defmethod execute ((cmd smove) (state state) (bot nanobot))
-  (let* ((bpos (bot-pos bot))
+(defmethod execute ((cmd smove) (state state) group)
+  (let* ((bot (car (first group)))
+         (bpos (bot-pos bot))
          (nbpos (pos-add bpos (lld cmd))))
     (setf (bot-pos bot) nbpos)
     (setf (state-energy state)
@@ -307,8 +316,8 @@
             (b2 (logior (ash i2 4) i1)))
         (%bytes 2 b1 b2)))))
 
-(defmethod get-volatile-regions ((cmd lmove) (bot nanobot))
-  (let* ((bpos (bot-pos bot))
+(defmethod get-volatile-regions ((cmd lmove) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (mbpos (pos-add bpos (sld1 cmd)))
          (nbpos (pos-add mbpos (sld2 cmd))))
     (list (make-region bpos mbpos)
@@ -317,8 +326,8 @@
            (pos-add mbpos (ident-vec (sld2 cmd)))
            nbpos))))
 
-(defmethod check-preconditions ((cmd lmove) (state state) bots)
-  (let* ((bot (car bots))
+(defmethod check-preconditions ((cmd lmove) (state state) group)
+  (let* ((bot (car (first group)))
          (bpos (bot-pos bot))
          (mbpos (pos-add bpos (sld1 cmd)))
          (nbpos (pos-add mbpos (sld2 cmd)))
@@ -329,8 +338,9 @@
          (no-full-in-region state region1)
          (no-full-in-region state region2))))
 
-(defmethod execute ((cmd lmove) (state state) bot)
-  (let* ((bpos (bot-pos bot))
+(defmethod execute ((cmd lmove) (state state) group)
+  (let* ((bot (car (first group)))
+         (bpos (bot-pos bot))
          (mbpos (pos-add bpos (sld1 cmd)))
          (nbpos (pos-add mbpos (sld2 cmd))))
     (setf (bot-pos bot) nbpos)
@@ -349,13 +359,13 @@
 (defmethod encode-command ((cmd fission))
   (%bytes 2 (logior #b00000101 (encode-nd (nd cmd))) (m cmd)))
 
-(defmethod get-volatile-regions ((cmd fission) (bot nanobot))
-  (let* ((bpos (bot-pos bot))
+(defmethod get-volatile-regions ((cmd fission) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (nbpos (pos-add bpos (nd cmd))))
     (list (make-region bpos nbpos))))
 
-(defmethod check-preconditions ((cmd fission) (state state) bots)
-  (let* ((bot (car bots))
+(defmethod check-preconditions ((cmd fission) (state state) group)
+  (let* ((bot (car (first group)))
          (bpos (bot-pos bot))
          (nbpos (pos-add bpos (nd cmd))))
     (and (bot-seeds bot)
@@ -364,8 +374,9 @@
          (> (length (bot-seeds bot)) (m cmd)) ;; N >= M + 1
          )))
 
-(defmethod execute ((cmd fission) (state state) bot)
-  (let* ((bpos (bot-pos bot))
+(defmethod execute ((cmd fission) (state state) group)
+  (let* ((bot (car (first group)))
+         (bpos (bot-pos bot))
          (nbpos (pos-add bpos (nd cmd)))
          (seed (car (bot-seeds bot)))
          (rest-seeds (cdr (bot-seeds bot)))
@@ -388,18 +399,18 @@
 (defmethod encode-command ((cmd fill))
   (%bytes 1 (logior #b00000011 (ash (encode-nd (nd cmd)) 3))))
 
-(defmethod get-volatile-regions ((cmd fill) (bot nanobot))
-  (let* ((bpos (bot-pos bot))
+(defmethod get-volatile-regions ((cmd fill) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (fpos (pos-add bpos (nd cmd))))
     (list (make-region bpos fpos))))
 
-(defmethod check-preconditions ((cmd fill) (state state) bots)
-  (let* ((bpos (bot-pos (car bots)))
+(defmethod check-preconditions ((cmd fill) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (fpos (pos-add bpos (nd cmd))))
     (inside-field? fpos (state-r state))))
 
-(defmethod execute ((cmd fill) (state state) bot)
-  (let* ((bpos (bot-pos bot))
+(defmethod execute ((cmd fill) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (fpos (pos-add bpos (nd cmd))))
     (if (voxel-void? state fpos)
         (progn
@@ -417,18 +428,18 @@
 (defmethod encode-command ((cmd void))
   (%bytes 1 (logior #b00000010 (ash (encode-nd (nd cmd)) 3))))
 
-(defmethod get-volatile-regions ((cmd void) (bot nanobot))
-  (let* ((bpos (bot-pos bot))
+(defmethod get-volatile-regions ((cmd void) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (fpos (pos-add bpos (nd cmd))))
     (list (make-region bpos fpos))))
 
-(defmethod check-preconditions ((cmd void) (state state) bots)
-  (let* ((bpos (bot-pos (car bots)))
+(defmethod check-preconditions ((cmd void) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (fpos (pos-add bpos (nd cmd))))
     (inside-field? fpos (state-r state))))
 
-(defmethod execute ((cmd void) (state state) bot)
-  (let* ((bpos (bot-pos bot))
+(defmethod execute ((cmd void) (state state) group)
+  (let* ((bpos (bot-pos (car (first group))))
          (fpos (pos-add bpos (nd cmd))))
     (if (voxel-full? state fpos)
         (progn
@@ -443,7 +454,7 @@
 ;;;------------------------------------------------------------------------------
 ;;; Group commands
 ;;;------------------------------------------------------------------------------
-(defun check-preconditions-fussion (state bots)
+(defun check-preconditions-fusion (state bots)
   (let ((fbpos (bot-pos (first bots)))
         (sbpos (bot-pos (second bots)))
         (r (state-r state)))
@@ -457,19 +468,19 @@
 (defmethod encode-command ((cmd fusionp))
   (%bytes 1 (logior #b00000111 (ash (encode-nd (nd cmd)) 3))))
 
-(defmethod get-volatile-regions ((cmd fusionp) (bot nanobot))
-  (let ((bpos (bot-pos bot)))
-    (list (make-region bpos bpos))))
+(defmethod get-volatile-regions ((cmd fusionp) (state state) group)
+  (let* ((bot1 (car (first group)))
+         (bot2 (car (second group)))
+         (pos1 (bot-pos bot1))
+         (pos2 (bot-pos bot2)))
+    (list (make-region pos1 pos1) (make-region pos2 pos2))))
 
-(defmethod check-preconditions ((cmd fusionp) (state state) bots)
-  (check-preconditions-fussion state bots))
+(defmethod check-preconditions ((cmd fusionp) (state state) group)
+  (check-preconditions-fusion state (mapcar #'car group)))
 
-(defmethod execute ((cmd fusionp) (state state) bot)
-  (let* ((bpos (bot-pos bot))
-         (nbpos (pos-add bpos (nd cmd)))
-         (sbot (find-if (lambda (b)
-                          (pos-eq (bot-pos b) nbpos))
-                        (state-bots state))))
+(defmethod execute ((cmd fusionp) (state state) group)
+  (let ((bot (car (first group)))
+        (sbot (car (second group))))
     (setf (state-bots state) (remove sbot (state-bots state)))
     (setf (bot-seeds bot) (append (bot-seeds sbot) (bot-seeds bot)))
     (setf (state-energy state) (- (state-energy state) 24))
@@ -482,17 +493,38 @@
 (defmethod encode-command ((cmd fusions))
   (%bytes 1 (logior #b00000110 (ash (encode-nd (nd cmd)) 3))))
 
-(defmethod get-volatile-regions ((cmd fusions) (bot nanobot))
-  (let ((bpos (bot-pos bot)))
-    (list (make-region bpos bpos))))
+(defmethod get-volatile-regions ((cmd fusions) (state state) group)
+  (let* ((bot1 (car (first group)))
+         (bot2 (car (second group)))
+         (pos1 (bot-pos bot1))
+         (pos2 (bot-pos bot2)))
+    (list (make-region pos1 pos1) (make-region pos2 pos2))))
 
-(defmethod check-preconditions ((cmd fusions) (state state) bots)
-  (check-preconditions-fussion state bots))
+(defmethod check-preconditions ((cmd fusions) (state state) group)
+  (check-preconditions-fusion state (mapcar #'car group)))
 
-(defmethod execute ((cmd fusions) (state state) bot)
-  state)
+(defmethod execute ((cmd fusions) (state state) group)
+  (let ((bot (car (first group)))
+        (sbot (car (second group))))
+    (setf (state-bots state) (remove sbot (state-bots state)))
+    (setf (bot-seeds bot) (append (bot-seeds sbot) (bot-seeds bot)))
+    (setf (state-energy state) (- (state-energy state) 24))
+    state))
 
 ;; GFill
+(defun group-region (group)
+  (labels ((%pos-< (x y)
+             (and (< (aref x 0) (aref y 0))
+                  (< (aref x 1) (aref y 1))
+                  (< (aref x 2) (aref y 2))))
+           (%opposite-corners ()
+             (let ((sorted-group (sort (copy-list group) #'%pos-<)))
+               (values (first sorted-group) (first (last sorted-group))))))
+    (ecase (length group)
+      (1 (make-region (first group) (first group)))
+      (2 (make-region (first group) (second group)))
+      ((4 8) (apply #'make-region (%opposite-corners))))))
+
 (defclass gfill (group)
   ((nd :accessor nd :initarg :nd)
    (fd :accessor fd :initarg :fd)))
@@ -501,17 +533,34 @@
   (multiple-value-bind (b1 b2 b3) (encode-fd (fd cmd))
     (%bytes 4 (logior #b00000001 (ash (encode-nd (nd cmd)) 3)) b1 b2 b3)))
 
-(defmethod get-volatile-regions ((cmd gfill) (bot nanobot))
-  ;; TODO: implement
-  )
+(defmethod get-volatile-regions ((cmd gfill) (state state) group)
+  (append (mapcar (lambda (b.c) (let ((p (bot-pos (car b.c)))) (make-region p p))) group)
+          (list (group-region group))))
 
-(defmethod check-preconditions ((cmd gfill) (state state) bots)
-  ;; TODO: implement
-  )
+(defun check-gfill/gvoid-preconditions (state group)
+  (let ((r-region (group-region group))
+        (ndis nil))
+    (and
+     (every (lambda (b.c)
+              (destructuring-bind (bot . cmd) b.c
+                (let* ((pos (bot-pos bot))
+                       (ndi (pos-add pos (nd cmd))))
+                  (and (inside-field? ndi (state-r state))
+                       (inside-field? (pos-add ndi (fd cmd)) (state-r state))
+                       (not (in-region pos r-region))
+                       (not (unless (member ndi ndis :test #'pos-eq) (push ndi ndis)))))))
+            group))))
 
-(defmethod execute ((cmd gfill) (state state) bot)
-  ;; TODO: implement
-  )
+(defmethod check-preconditions ((cmd gfill) (state state) group)
+  (check-gfill/gvoid-preconditions state group))
+
+(defmethod execute ((cmd gfill) (state state) group)
+  (dolist (c (region-points (group-region group)))
+    (if (voxel-void? state c)
+        (progn
+          (fill-voxel state c)
+          (setf (state-energy state) (+ (state-energy state) 12)))
+        (setf (state-energy state) (+ (state-energy state) 6)))))
 
 ;; GVoid
 (defclass gvoid (group)
@@ -522,15 +571,17 @@
   (multiple-value-bind (b1 b2 b3) (encode-fd (fd cmd))
     (%bytes 4 (logior #b00000000 (ash (encode-nd (nd cmd)) 3)) b1 b2 b3)))
 
-(defmethod get-volatile-regions ((cmd gvoid) (bot nanobot))
-  ;; TODO: implement
-  )
+(defmethod get-volatile-regions ((cmd gvoid) (state state) group)
+  (append (mapcar (lambda (b.c) (let ((p (bot-pos (car b.c)))) (make-region p p))) group)
+          (list (group-region group))))
 
-(defmethod check-preconditions ((cmd gvoid) (state state) bots)
-  ;; TODO: implement
-  )
+(defmethod check-preconditions ((cmd gvoid) (state state) group)
+  (check-gfill/gvoid-preconditions state group))
 
-(defmethod execute ((cmd gvoid) (state state) bot)
-  ;; TODO: implement
-  )
-
+(defmethod execute ((cmd gvoid) (state state) group)
+  (dolist (c (region-points (group-region group)))
+    (if (voxel-full? state c)
+        (progn
+          (void-voxel state c)
+          (setf (state-energy state) (- (state-energy state) 12)))
+        (setf (state-energy state) (+ (state-energy state) 3)))))
