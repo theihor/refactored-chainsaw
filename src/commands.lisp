@@ -1,7 +1,8 @@
 (uiop:define-package :src/commands
     (:use :common-lisp)
   (:use :src/coordinates
-        :src/state)
+        :src/state
+        :src/utils)
   (:shadow #:fill)
   (:export
    ;; commands
@@ -30,6 +31,8 @@
    #:execute
    #:check-preconditions
    #:group-region
+
+   #:sort-commands-for-bots
    ))
 
 (in-package :src/commands)
@@ -585,3 +588,32 @@
           (void-voxel state c)
           (setf (state-energy state) (- (state-energy state) 12)))
         (setf (state-energy state) (+ (state-energy state) 3)))))
+
+
+;; commands sort
+(defun sort-commands-for-bots (bid->cmds count-list)
+  "Accepts hash-table of kind bid -> sequence of commands
+   and a list of counts of active bids at avery timestep"
+  (let ((bids (sort (alexandria:hash-table-keys bid->cmds) #'<))
+        (commands nil))
+    (labels ((%print ()
+               (format t "~%tab:~%")
+               (maphash (lambda (bid cmds)
+                          (format t "~A: ~A~%" bid cmds))
+                        bid->cmds))
+             (%sort-cmd (bids)
+               (loop :for bid :in bids :do
+                    (let ((cmd (pop (gethash bid bid->cmds))))
+                      (unless (gethash bid bid->cmds)
+                        (remhash bid bid->cmds))
+                      (if cmd
+                          (push cmd commands)
+                          (push (make-instance 'wait) commands))))))
+
+      (loop
+         :for n :in count-list
+         :until (= (hash-table-count bid->cmds) 0) :do
+           (%sort-cmd (take n bids))))
+
+    (reverse commands)))
+

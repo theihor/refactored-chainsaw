@@ -11,7 +11,7 @@
 (ql:quickload 'alexandria)
 (ql:quickload (ql-git 'array-operations "https://github.com/bendudson/array-operations.git"))
 (ql:quickload 'cl-graph)
-;; (ql:quickload 'cl-heap)
+(ql:quickload 'cl-heap)
 ;; (ql:quickload 'spatial-trees)
 ;; (ql:quickload 'spatial-trees.nns)
 (ql:quickload 'apply-argv)
