@@ -6,7 +6,7 @@
         :src/model
         :src/tracer
         :src/trivial
-        :src/path)
+        :src/layered-bot)
   (:import-from :src/commands
                 #:read-trace-from-file)
   (:export
