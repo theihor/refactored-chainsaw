@@ -48,16 +48,35 @@
   (let ((alist (copy-list bot-command-alist))
         (groups nil))
     (labels ((%group-one (bot-cmd)
-               (destructuring-bind (_ . cmd) bot-cmd
-                 (declare (ignore _))
+               (destructuring-bind (bot . cmd) bot-cmd
                  (typecase cmd
                    ((or fusionp fusions)
-                    (let ((bot-cmd2 (find-if (lambda (b.c)
-                                               (pos-eq (bot-pos (car b.c))
-                                                       (nd cmd)))
-                                             alist)))
-                      (push (list bot-cmd bot-cmd2) groups)
-                      (setf alist (remove bot-cmd2 alist :test #'eq))))
+                    (let ((bot2-cmd2
+                           (find-if (lambda (b.c)
+                                      (and (typep (cdr b.c) '(or fusions fusionp))
+                                           (not (typep (cdr b.c) (type-of cmd)))
+                                           (pos-eq (bot-pos (car b.c))
+                                                   (nd cmd))))
+                                    alist)))
+                      (push (list bot-cmd bot2-cmd2) groups)
+                      (setf alist (remove bot2-cmd2 alist :test #'eq))))
+                   ((or gfill gvoid)
+                    (push
+                     (loop
+                        :with start-point := (pos-add (bot-pos bot) (nd cmd))
+                        :for next-point := (pos-add start-point (fd cmd))
+                        :while (not (pos-eq next-point start-point))
+                        :collect
+                          (let ((bot2-cmd2
+                                 (find-if (lambda (b.c)
+                                            (and (typep (cdr b.c) (type-of cmd))
+                                                 (pos-eq (pos-add (bot-pos (car b.c))
+                                                                  (nd (cdr b.c)))
+                                                         next-point)))
+                                          alist)))
+                            (setf next-point (bot-pos (car bot2-cmd2)))
+                            (setf alist (remove bot2-cmd2 alist :test #'eq))))
+                     groups))
                    (t (push (list bot-cmd) groups))))))
       (loop :while alist :do
            (let ((bot-cmd (pop alist)))
@@ -100,34 +119,41 @@
     (let* ((bots (sort (copy-list (state-bots state)) #'< :key #'bot-bid))
            (n (length bots))
            (commands (take n trace))
-           (groups (progn (assert (= (length commands) n))
-                          (group-bots (mapcar #'cons bots commands))))
+           (groups
+            (progn
+              (assert (= (length commands) n))
+              (group-bots (mapcar #'cons bots commands))))
            (volatile-region-groups
-            (loop :for group :in groups :collect
-                 (loop :for (bot . cmd) :in group :append
-                      (get-volatile-regions cmd bot)))))
+            (loop :for group :in groups
+               :collect (destructuring-bind (_ . cmd) (first group)
+                          (declare (ignore _))
+                          (get-volatile-regions cmd state group)))))
       (check-volatile-regions volatile-region-groups r)
-      (loop :for group :in groups :do
-           (loop :for (bot . cmd) :in group :do
-                (unless (check-preconditions
-                         cmd state (mapcar #'car group))
-                  (error "Preconditions failed for command ~A and group ~A"
-                         cmd group))))
+      (loop :for group :in groups
+         :do (destructuring-bind (bot . cmd) (first group)
+               (unless (check-preconditions cmd state group)
+                 (error "Preconditions failed for command ~A and group ~A" bot group))))
 
       ;; global maintainance
       (ecase harmonics
         (:high (incf energy (* 30 r r r)))
         (:low (incf energy (* 3 r r r))))
+
       ;; bots maintainance
       (incf energy (* 20 n))
 
-      (loop :for group :in groups :do
-           (loop :for (bot . cmd) :in group :do
-                (execute cmd state bot)))
+      (loop :for group :in groups
+         :do (destructuring-bind (_ . cmd) (first group)
+               (declare (ignore _))
+               (execute cmd state group)))
 
-      (loop :for group :in groups :do
-           (loop :for (bot . cmd) :in group :do
-                (when (typep cmd 'src/commands:fill)
-                  (grounded-add-voxel gs (pos-add (bot-pos bot) (nd cmd)) state))))
+      (loop :for group :in groups
+         :do (destructuring-bind (bot . cmd) (first group)
+               (typecase cmd
+                 (src/commands:fill
+                  (grounded-add-voxel gs (pos-add (bot-pos bot) (nd cmd)) state))
+                 ;; (void
+                 ;;  (grounded-rm-voxel gs))
+                 )))
 
       (setf trace (nthcdr n trace)))))
