@@ -360,7 +360,7 @@
    (m :accessor m :initarg :m)))
 
 (defmethod encode-command ((cmd fission))
-  (%bytes 2 (logior #b00000101 (encode-nd (nd cmd))) (m cmd)))
+  (%bytes 2 (logior #b00000101 (ash (encode-nd (nd cmd)) 3)) (m cmd)))
 
 (defmethod get-volatile-regions ((cmd fission) (state state) group)
   (let* ((bpos (bot-pos (car (first group))))

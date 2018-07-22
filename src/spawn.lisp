@@ -6,8 +6,9 @@
         :src/commands
         :src/model
         :src/utils)
-  (:import-from :src/trivial
-                #:moves-in-clear-space))
+  (:import-from :src/coordinates-helper
+                #:moves-in-clear-space)
+  (:export #:primitive-spawn))
 
 (in-package :src/spawn)
 
@@ -22,15 +23,21 @@
     (loop :while seeds :do
          (push (cons (bot-bid bot) (make-instance 'fission
                                                   :nd (if (oddp i)
-                                                          #(1 0 0)
-                                                          #(0 0 1))
+                                                          (make-point 1 0 0)
+                                                          (make-point 0 0 1))
                                                   :m 0))
                cmd-alist)
          (let* ((bot1-bid (pop seeds))
                 (bot1-pos (pop new-bots-positions))
-                (moves (moves-in-clear-space
-                        (pos-add (bot-pos bot) #(1 0 0))
-                        bot1-pos)))
+                ;; first move to y, then to destination
+                (bot1-start-pos (pos-add (bot-pos bot)
+                                         (if (oddp i) #(1 0 0) #(0 0 1))))
+                (proxy (with-coordinates (x y z) bot1-pos
+                                         (with-coordinates (x0 y0 z0) bot1-start-pos
+                                           (make-point x0 y z0))))
+                (moves (append (moves-in-clear-space bot1-start-pos proxy)
+                               (moves-in-clear-space proxy bot1-pos))
+                  ))
            (incf i)
            (loop :for m :in moves :do
                 (push (cons bot1-bid m) cmd-alist))))
@@ -45,8 +52,10 @@
                                    (alexandria:hash-table-values bot->cmds))))
              (init-count-lst (loop :for i :from 1 :to (1+ n) :collect i))
              (count-list (append init-count-lst
-                                 (make-list (- steps (1+ n))
-                                            :initial-element (1+ n)))))
+                                 (if (> steps (1+ n))
+                                     (make-list (- steps (1+ n))
+                                                :initial-element (1+ n))
+                                     nil))))
         (sort-commands-for-bots bot->cmds count-list)))))
 
 ;; (defun spawn-in-line (bot region &key (n :all) (commands-acc nil) (spawned))

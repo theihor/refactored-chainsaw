@@ -1,13 +1,74 @@
 (uiop:define-package :src/coordinates-helper
-    (:use :common-lisp
-          :src/coordinates
-          :src/state)
+    (:use :common-lisp)
+  (:shadowing-import-from :src/commands #:fill)
+  (:use :src/coordinates
+        :src/state
+        :src/commands)
   (:export #:compute-model-bounding-box
-           #:get-clusters))
+           #:get-clusters
+           #:moves-in-clear-space))
 
 (in-package :src/coordinates-helper)
 
 (defparameter *bot-number* 40)
+
+(defun moves-in-clear-space (c1 c2)
+  (let ((diff (pos-diff c2 c1))
+        (moves nil))
+    (with-coordinates (dx dy dz) diff
+      (loop :until (and (= dx 0) (= dy 0) (= dz 0)) :do
+          ;; (format t "~A ~A ~A~%" dx dy dz)
+           (let ((adx (abs dx))
+                 (ady (abs dy))
+                 (adz (abs dz))
+                 (sdx (signum dx))
+                 (sdy (signum dy))
+                 (sdz (signum dz)))
+             (cond
+               ((> ady 15)
+                (push (make-instance 'smove :lld (make-point 0 (* sdy 15) 0)) moves)
+                (decf dy (* sdy 15)))
+               ((> adx 15)
+                (push (make-instance 'smove :lld (make-point (* sdx 15) 0 0)) moves)
+                (decf dx (* sdx 15)))
+               ((> adz 15)
+                (push (make-instance 'smove :lld (make-point 0 0 (* sdz 15))) moves)
+                (decf dz (* sdz 15)))
+               ((and (<= ady 15) (> ady 5))
+                (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)
+                (setf dy 0))
+               ((and (<= adx 15) (> adx 5))
+                (push (make-instance 'smove :lld (make-point dx 0 0)) moves)
+                (setf dx 0))
+               ((and (<= adz 15) (> adz 5))
+                (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)
+                (setf dz 0))
+               ((= dy 0)
+                (if (and (/= dx 0) (/= dz 0))
+                    (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 0 dz)) moves)
+                    (if (/= dx 0)
+                        (push (make-instance 'smove :lld (make-point dx 0 0)) moves)
+                        (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)))
+                (setf dx 0) (setf dz 0))
+               ((= dx 0)
+                (if (and (/= dy 0) (/= dz 0))
+                    (push (make-instance 'lmove :sld1 (make-point 0 dy 0) :sld2 (make-point 0 0 dz)) moves)
+                    (if (/= dy 0)
+                        (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)
+                        (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)))
+                (setf dy 0) (setf dz 0))
+               ((= dz 0)
+                (if (and (/= dx 0) (/= dy 0))
+                    (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 dy 0)) moves)
+                    (if (/= dx 0)
+                        (push (make-instance 'smove :lld (make-point dx 0 0)) moves)
+                        (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)))
+                (setf dx 0) (setf dy 0))
+               (t ;; (0 < dx <= 5) and (0 < dy <= 5) and (0 < dz <= 5)
+                (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 0 dz)) moves)
+                (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)
+                (setf dx 0) (setf dy 0) (setf dz 0))))))
+    (reverse moves)))
 
 (defun compute-model-bounding-box (state)
   (with-slots (r) state

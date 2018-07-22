@@ -7,7 +7,9 @@
         :src/commands
         :src/model
         :src/grounded
-	:src/tracer)
+	    :src/tracer
+        :src/spawn
+        :src/utils)
   (:export #:moves-in-clear-space))
 
 (in-package :src/trivial)
@@ -66,63 +68,7 @@
 ;;                                      (:z (make-point 0 0 (fourth move))))
 ;;                              ))))))
 
-(defun moves-in-clear-space (c1 c2)
-  (let ((diff (pos-diff c2 c1))
-        (moves nil))
-    (with-coordinates (dx dy dz) diff
-      (loop :until (and (= dx 0) (= dy 0) (= dz 0)) :do
-         ;; (format t "~A ~A ~A~%" dx dy dz)
-           (let ((adx (abs dx))
-                 (ady (abs dy))
-                 (adz (abs dz))
-                 (sdx (signum dx))
-                 (sdy (signum dy))
-                 (sdz (signum dz)))
-             (cond
-               ((> adx 15)
-                (push (make-instance 'smove :lld (make-point (* sdx 15) 0 0)) moves)
-                (decf dx (* sdx 15)))
-               ((> ady 15)
-                (push (make-instance 'smove :lld (make-point 0 (* sdy 15) 0)) moves)
-                (decf dy (* sdy 15)))
-               ((> adz 15)
-                (push (make-instance 'smove :lld (make-point 0 0 (* sdz 15))) moves)
-                (decf dz (* sdz 15)))
-               ((and (<= adx 15) (> adx 5))
-                (push (make-instance 'smove :lld (make-point dx 0 0)) moves)
-                (setf dx 0))
-               ((and (<= ady 15) (> ady 5))
-                (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)
-                (setf dy 0))
-               ((and (<= adz 15) (> adz 5))
-                (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)
-                (setf dz 0))
-               ((= dx 0)
-                (if (and (/= dy 0) (/= dz 0))
-                    (push (make-instance 'lmove :sld1 (make-point 0 dy 0) :sld2 (make-point 0 0 dz)) moves)
-                    (if (/= dy 0)
-                        (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)
-                        (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)))
-                (setf dy 0) (setf dz 0))
-               ((= dy 0)
-                (if (and (/= dx 0) (/= dz 0))
-                    (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 0 dz)) moves)
-                    (if (/= dx 0)
-                        (push (make-instance 'smove :lld (make-point dx 0 0)) moves)
-                        (push (make-instance 'smove :lld (make-point 0 0 dz)) moves)))
-                (setf dx 0) (setf dz 0))
-               ((= dz 0)
-                (if (and (/= dx 0) (/= dy 0))
-                    (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 dy 0)) moves)
-                    (if (/= dx 0)
-                        (push (make-instance 'smove :lld (make-point dx 0 0)) moves)
-                        (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)))
-                (setf dx 0) (setf dy 0))
-               (t ;; (0 < dx <= 5) and (0 < dy <= 5) and (0 < dz <= 5)
-                (push (make-instance 'lmove :sld1 (make-point dx 0 0) :sld2 (make-point 0 0 dz)) moves)
-                (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)
-                (setf dx 0) (setf dy 0) (setf dz 0))))))
-    (reverse moves)))
+
 
 (defmethod generate-trace ((tracer (eql :trivial)) task-type src-model tgt-model)
   (let ((target-state (src/model:make-pseudo-state-from-model tgt-model))
@@ -199,6 +145,110 @@
         ;; (format t "commands: ~A~%" (reverse commands))
         (reverse commands)))))
 
+(defun constant-count-list-from-bid->cmds (bid->cmds)
+  (let* ((steps (apply #'max
+                       (mapcar #'length
+                               (alexandria:hash-table-values bid->cmds))))
+         (count-list (make-list steps :initial-element (hash-table-count bid->cmds))))
+    count-list))
+
+(defmethod generate-trace ((tracer (eql :trivial-parallel)) task-type src-model model)
+  (let* ((target-state (src/model:make-pseudo-state-from-model model))
+         (r (model-resolution model))
+         (bot (make-instance 'nanobot
+                             :bid 1
+                             :pos #(0 0 0)
+                             :seeds (loop :for i :from 2 :to 40 :collect i)))
+         (state (src/state:make-state :r r
+                                      :harmonics :low
+                                      :matrix (make-array (* r r r)
+                                                          :element-type 'bit
+                                                          :initial-element 0)
+                                      :bots (list bot)
+                                      :trace nil))
+         (gs (make-instance 'grounded-state))
+         (commands nil)
+         (clusters (get-clusters target-state)))
+
+    ;; (when (eq (state-harmonics state) :low)
+    ;;   (push (make-instance 'flip) commands))
+
+    ;; first, let's spawn all bots
+    (let* ((regions
+            (loop :for cluster :in (alexandria:hash-table-keys clusters)
+               :collect (with-coordinates (x1 y1 z1) (car cluster)
+                                          (with-coordinates (x2 y2 z2) (cdr cluster)
+                                                            (make-region (make-point x1 0 z1)
+                                                                         (make-point x2 (1- r) z2))))))
+           (bots-positions (loop :for reg :in (cdr regions)
+                              :for dy :from 2
+                              :collect
+                                (progn
+                                  (when (= 0 (mod dy (1- (state-r state))))
+                                    (setf dy 1))
+                                  (with-coordinates (x y z) (car reg)
+                                                    (make-point x dy z)))))
+           (bids (sort (cons (bot-bid bot) (copy-list (take (length bots-positions) (bot-seeds bot)))) #'<))
+           (bid->cmds (make-hash-table :test #'eq))
+           (bid->pos (make-hash-table :test #'eq)))
+      ;; (format t "regions: ~A~%" regions)
+      ;; (format t "bot-positions: ~A~%" bots-positions)
+      (setf commands
+            (reverse (primitive-spawn bot bots-positions :n (1- (hash-table-count clusters)))))
+
+      (let ((init-pos (make-hash-table :test #'eq)))
+
+        ;; (push (make-instance 'wait) (gethash (bot-bid bot) init-pos))
+
+        (loop :for reg :in (cdr regions)
+           :for bot1-pos :in bots-positions
+           :for bid :in (cdr bids)
+           :do (loop :for move :in (moves-in-clear-space bot1-pos (car reg))
+                  :do (push move (gethash bid init-pos))))
+
+        (loop :for move :in (moves-in-clear-space #(0 0 0) (print (car (first regions))))
+           :do (loop :for bid :in bids :do
+                    (if (= bid (bot-bid bot))
+                        (push move (gethash bid init-pos))
+                        (push (make-instance 'wait) (gethash bid init-pos)))))
+
+        (loop :for cmd :in (sort-commands-for-bots
+                            init-pos
+                            (constant-count-list-from-bid->cmds init-pos))
+           :do (push cmd commands)))
+
+      (setf (state-trace state) (reverse commands))
+
+      ;; (with-open-file (stream "/home/theihor/repo/refactored-chainsaw/test-trace.nbt"
+      ;;                         :direction :output
+      ;;                         :if-exists :supersede
+      ;;                         :if-does-not-exist :create
+      ;;                         :element-type '(unsigned-byte 8))
+      ;;   (write-sequence (encode-commands (state-trace state)) stream))
+      ;; (break)
+      (loop :while (state-trace state) :do
+           (src/execution:execute-one-step state gs))
+      (setf (state-bots state) (list bot))
+      (loop :for region :in regions
+         :for bid :in bids
+         :do
+           (setf (bot-pos bot) (car region))
+           (multiple-value-bind (bot-commands new-bot-pos)
+               (generate-trivial-trace-for-region
+                state gs target-state region :use-gs t)
+             ;; (loop :for m :in moves-and-fills
+             ;;    ;; (moves-in-clear-space
+             ;;    ;;  bot-pos (make-point 0 (aref bot-pos 1) 0))
+             ;;    ;; (moves-in-clear-space
+             ;;    ;;  (make-point 0 (aref bot-pos 1) 0) #(0 0 0))
+             ;;    :do (push m bot-commands))
+             (setf (gethash bid bid->cmds) bot-commands)
+             (setf (gethash bid bid->pos) new-bot-pos)))
+      (append (reverse commands)
+              (sort-commands-for-bots
+               bid->cmds
+               (constant-count-list-from-bid->cmds bid->cmds))))))
+
 (defun generate-trivial-trace-for-region (state gs target-state region &key (use-gs nil))
   "Assumes bot to be already in c1 of `region' and state with :high `harmonics'"
   (let ((commands nil)
@@ -215,7 +265,8 @@
                                                      y
                                                      (+ z dz))))
                                  (when (and (near? new-bot-pos c1)
-                                            (inside-field? c1 (state-r target-state)))
+                                            (inside-field? c1 (state-r target-state))
+                                            (in-region c1 region))
                                    (push c1 voxels-to-fill)))))
 
                  (let ((moves (moves-in-clear-space bot-pos new-bot-pos))
@@ -226,16 +277,17 @@
 
                           (unless moved?
                             (loop :for m :in moves :do (push m commands))
-                            (when use-gs
-                              (setf (state-trace state) moves)
-                              (loop :while (state-trace state) :do
-                                   (src/execution:execute-one-step state gs)))
+                            ;; (when use-gs
+                            ;;   (setf (state-trace state) moves)
+                            ;;   (loop :while (state-trace state) :do
+                            ;;        (src/execution:execute-one-step state gs)))
                             (setf moved? t)
                             (setf bot-pos new-bot-pos))
 
                           (let ((fill-cmd (make-instance 'fill :nd (pos-diff c new-bot-pos))))
                             (if use-gs
                                 (progn
+                                  (setf (bot-pos (first (state-bots state))) bot-pos)
                                   (setf (state-trace state) (list fill-cmd))
                                   (src/execution:execute-one-step state gs)
                                   ;; if after execution of fill new voxel,
@@ -289,7 +341,7 @@
 
 (defun trivial-tracer (in-file out-file)
   (let* ((model (read-model-from-file in-file))
-         (commands (generate-trace :trivial-low :assembly nil model)))
+         (commands (generate-trace :trivial-parallel :assembly nil model)))
     (with-open-file (stream out-file
                             :direction :output
                             :if-exists :supersede
