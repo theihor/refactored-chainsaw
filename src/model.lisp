@@ -5,6 +5,7 @@
   (:import-from :bit-smasher)
   (:export
    #:model-resolution
+   #:model-matrix
 
    #:make-pseudo-state-from-model
 
