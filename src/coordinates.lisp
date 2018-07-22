@@ -19,7 +19,8 @@
            #:+dimensions+
            #:ident-vec
            #:mapc-near
-           #:copy-point))
+           #:copy-point
+           #:near?))
 
 (in-package :src/coordinates)
 
