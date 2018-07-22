@@ -6,7 +6,8 @@
         :src/model
         :src/tracer
         :src/trivial
-        :src/layered-bot)
+        :src/layered-bot
+        :src/bitonic)
   (:import-from :src/commands
                 #:read-trace-from-file
 		#:encode-commands)
