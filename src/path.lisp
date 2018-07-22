@@ -258,12 +258,12 @@
                  (%commands (moves-to-commands moves)))))
       (loop
          :do (progn
-               (format t "Step: ~A~%" (reduce #'+ (mapcar #'length res-trace)))
-               (format t "Bot: ~A~%" bot-coord)
-               (format t "Fill set: ~A~%" (alexandria:hash-table-keys fill-set))
-               (format t "Target set: ~A~%" (alexandria:hash-table-keys (trg-set-tab target-set)))
+               ;; (format t "Step: ~A~%" (reduce #'+ (mapcar #'length res-trace)))
+               ;; (format t "Bot: ~A~%" bot-coord)
+               ;; (format t "Fill set: ~A~%" (alexandria:hash-table-keys fill-set))
+               ;; (format t "Target set: ~A~%" (alexandria:hash-table-keys (trg-set-tab target-set)))
                (let ((coord (find-to-fill dir bot-coord fill-set state)))
-                 (format t "Can fill coord: ~A~%" coord)
+                 ;; (format t "Can fill coord: ~A~%" coord)
                  (if coord
                      (progn
                        (%commands (list (make-instance 'fill
