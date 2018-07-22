@@ -3,6 +3,7 @@
   (:shadowing-import-from :src/commands #:fill)
   (:use :src/coordinates
         :src/state
+        :src/coordinates-helper
         :src/commands
         :src/model
         :src/grounded)
@@ -121,62 +122,6 @@
                 (push (make-instance 'smove :lld (make-point 0 dy 0)) moves)
                 (setf dx 0) (setf dy 0) (setf dz 0))))))
     (reverse moves)))
-
-(defun compute-model-bounding-box (state)
-  (with-slots (r) state
-    (let ((r (1- r))
-          x1 y1 z1 x2 y2 z2)
-
-      (block x1-search
-        (loop :for i :from 0 :to r :do
-             (loop :for j :from 0 :to r :do
-                  (loop :for k :from 0 :to r :do
-                       (when (voxel-full? state (make-point i j k))
-                         (setf x1 i)
-                         (return-from x1-search))))))
-      (unless x1 (error "Model is without any full voxels"))
-
-      (block x2-search
-        (loop :for i :from r :downto 0 :do
-             (loop :for j :from 0 :to r :do
-                  (loop :for k :from 0 :to r :do
-                       (when (voxel-full? state (make-point i j k))
-                         (setf x2 i)
-                         (return-from x2-search))))))
-
-      (block y1-search
-        (loop :for j :from 0 :to r :do
-             (loop :for i :from 0 :to r :do
-                  (loop :for k :from 0 :to r :do
-                       (when (voxel-full? state (make-point i j k))
-                         (setf y1 j)
-                         (return-from y1-search))))))
-
-      (block y2-search
-        (loop :for j :from r :downto 0 :do
-             (loop :for i :from 0 :to r :do
-                  (loop :for k :from 0 :to r :do
-                       (when (voxel-full? state (make-point i j k))
-                         (setf y2 j)
-                         (return-from y2-search))))))
-
-      (block z1-search
-        (loop :for k :from 0 :to r :do
-             (loop :for i :from 0 :to r :do
-                  (loop :for j :from 0 :to r :do
-                       (when (voxel-full? state (make-point i j k))
-                         (setf z1 k)
-                         (return-from z1-search))))))
-
-      (block z2-search
-        (loop :for k :from r :downto 0 :do
-             (loop :for i :from 0 :to r :do
-                  (loop :for j :from 0 :to r :do
-                       (when (voxel-full? state (make-point i j k))
-                         (setf z2 k)
-                         (return-from z2-search))))))
-      (cons (make-point x1 y1 z1)
-            (make-point x2 y2 z2)))))
 
 (defmethod generate-trace ((tracer (eql :trivial)) model)
   (let ((target-state (src/model:make-pseudo-state-from-model model))
