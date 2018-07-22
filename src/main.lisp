@@ -18,11 +18,17 @@
 (in-package :src/main)
 
 (defun execute-trace-on-model (task-type src-model tgt-model trace-file)
+  (execute-trace-on-model-aux 
+   task-type 
+   src-model 
+   tgt-model 
+   (read-trace-from-file trace-file)))
+
+(defun execute-trace-on-model-aux (task-type src-model tgt-model trace)
   (case task-type
     (:assembly
      (let* ((model (read-model-from-file tgt-model))
-	    (trace (read-trace-from-file trace-file))
-	    (model-name (subseq tgt-model 0 (- (position #\. (file-namestring tgt-model)) 4)))
+	    (model-name (subseq (file-namestring tgt-model) 0 (- (position #\. (file-namestring tgt-model)) 4)))
 	    (r (model-resolution model))
 	    (bot (make-instance 'nanobot
 				:bid 1
@@ -44,8 +50,7 @@
        (values model-name (equalp xor-res zero-model) (state-energy final-state))))
     (:disassembly
      (let* ((model (read-model-from-file src-model))
-	    (trace (read-trace-from-file trace-file))
-	    (model-name (subseq src-model 0 (- (position #\. (file-namestring src-model)) 4)))
+	    (model-name (subseq (file-namestring src-model) 0 (- (position #\. (file-namestring src-model)) 4)))
 	    (r (model-resolution model))
 	    (bot (make-instance 'nanobot
 				:bid 1
@@ -64,8 +69,7 @@
     (:reassembly
      (let* ((model (read-model-from-file src-model))
 	    (res-model (read-model-from-file tgt-model))
-	    (trace (read-trace-from-file trace-file))
-	    (model-name (subseq src-model 0 (- (position #\. (file-namestring src-model)) 4)))
+	    (model-name (subseq (file-namestring src-model) 0 (- (position #\. (file-namestring src-model)) 4)))
 	    (r (model-resolution model))
 	    (bot (make-instance 'nanobot
 				:bid 1
@@ -88,7 +92,7 @@
 	    (trace (generate-trace tracer :assembly nil model)))
        (format t ":assembly task: ~A~%" tgt-model)
        (multiple-value-bind (model-name success energy) 
-	   (execute-trace-on-model :assembly src-model tgt-model trace)
+	   (execute-trace-on-model-aux :assembly src-model tgt-model trace)
 	 (when success
 	   (with-open-file (stream (format nil "./traces/~A.nbt.~A" model-name energy)
                             :direction :output
@@ -101,7 +105,7 @@
 	    (trace (generate-trace tracer :disassembly model nil)))
        (format t ":disassembly task: ~A~%" src-model)
        (multiple-value-bind (model-name success energy) 
-	   (execute-trace-on-model :disassembly src-model tgt-model trace)
+	   (execute-trace-on-model-aux :disassembly src-model tgt-model trace)
 	 (when success
 	   (with-open-file (stream (format nil "./traces/~A.nbt.~A" model-name energy)
                             :direction :output
@@ -115,7 +119,7 @@
 	    (trace (generate-trace tracer :reassembly model res-model)))
        (format t ":reassembly task: ~A ~A~%" src-model tgt-model)
        (multiple-value-bind (model-name success energy) 
-	   (execute-trace-on-model :reassembly src-model tgt-model trace)
+	   (execute-trace-on-model-aux :reassembly src-model tgt-model trace)
 	 (when success
 	   (with-open-file (stream (format nil "./traces/~A.nbt.~A" model-name energy)
                             :direction :output
