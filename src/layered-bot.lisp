@@ -322,5 +322,5 @@
                             :element-type '(unsigned-byte 8))
       (write-sequence (encode-commands commands) stream))))
 
-(defmethod generate-trace ((tracer (eql :simple-layered)) model)
-  (go-sucker model))
+(defmethod generate-trace ((tracer (eql :simple-layered)) task-type src-model tgt-model)
+  (go-sucker tgt-model))
