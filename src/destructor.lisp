@@ -2,7 +2,8 @@
     (:use :common-lisp
           :src/model
           :src/state
-          :src/coordinates))
+          :src/coordinates)
+  (:export #:build-ground-dep-graph))
 
 (in-package :src/destructor)
 
@@ -112,8 +113,9 @@ If voxel A is grounded because of several voxels, then build just a single edge 
          (resolution (model-resolution model))
          ;; Used to track grounded voxels
          (grounded-matrix (make-array (length matrix) :element-type 'bit))
-         (dep-graph (cl-graph:make-graph 'basic-graph)))
+         (dep-graph (cl-graph:make-graph 'cl-graph:basic-graph)))
     (mark-0th-floor-grounded resolution matrix grounded-matrix dep-graph)
     (mark-grounded-bottom-up resolution matrix grounded-matrix dep-graph)
-    (mark-grounded-top-down resolution matrix grounded-matrix dep-graph)))
+    (mark-grounded-top-down resolution matrix grounded-matrix dep-graph)
+    dep-graph))
 
