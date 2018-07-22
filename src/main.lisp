@@ -1,4 +1,4 @@
-(defpackage :src/main
+(uiop:define-package :src/main
   (:nicknames :main)
   (:use :common-lisp :anaphora
         :src/state
@@ -8,7 +8,8 @@
         :src/trivial
         :src/layered-bot)
   (:import-from :src/commands
-                #:read-trace-from-file)
+                #:read-trace-from-file
+		#:encode-commands)
   (:export
    #:main
    #:execute-trace-on-model
@@ -16,44 +17,134 @@
 
 (in-package :src/main)
 
-(defun execute-trace-on-model (model-file trace-file)
-  (let* ((model (read-model-from-file model-file))
-         (trace (read-trace-from-file trace-file))
-         (r (model-resolution model))
-         (bot (make-instance 'nanobot
-                             :bid 1
-                             :pos #(0 0 0)
-                             :seeds (loop :for i :from 2 :to 20 :collect i)))
-         (state (make-state :r r
-                            :harmonics :low
-                            :matrix (make-array (* r r r)
-                                                :element-type 'bit
-                                                :initial-element 0)
-                            :bots (list bot)
-                            :trace trace)))
-    (execute-state-trace state)))
+(defun execute-trace-on-model (task-type src-model tgt-model trace-file)
+  (execute-trace-on-model-aux 
+   task-type 
+   src-model 
+   tgt-model 
+   (read-trace-from-file trace-file)))
 
-(defun generate-trace-for-model (model-file tracer)
+(defun execute-trace-on-model-aux (task-type src-model tgt-model trace)
+  (case task-type
+    (:assembly
+     (let* ((model (read-model-from-file tgt-model))
+	    (model-name (subseq (file-namestring tgt-model) 0 (- (position #\. (file-namestring tgt-model)) 4)))
+	    (r (model-resolution model))
+	    (bot (make-instance 'nanobot
+				:bid 1
+				:pos #(0 0 0)
+				:seeds (loop :for i :from 2 :to 20 :collect i)))
+	    (state (make-state :r r
+			       :harmonics :low
+			       :matrix (make-array (* r r r)
+						   :element-type 'bit
+						   :initial-element 0)
+			       :bots (list bot)
+			       :trace trace))
+	    (final-state (execute-state-trace state))
+	    (xor-res (bit-xor (model-matrix model) (state-matrix final-state)))
+	    (zero-model (make-array (* r r r)
+				    :element-type 'bit
+				    :initial-element 0)))
+       
+       (values model-name (equalp xor-res zero-model) (state-energy final-state))))
+    (:disassembly
+     (let* ((model (read-model-from-file src-model))
+	    (model-name (subseq (file-namestring src-model) 0 (- (position #\. (file-namestring src-model)) 4)))
+	    (r (model-resolution model))
+	    (bot (make-instance 'nanobot
+				:bid 1
+				:pos #(0 0 0)
+				:seeds (loop :for i :from 2 :to 20 :collect i)))
+	    (state (make-state :r r
+			       :harmonics :low
+			       :matrix (model-matrix model)
+			       :bots (list bot)
+			       :trace trace))
+	    (final-state (execute-state-trace state))
+	    (zero-model (make-array (* r r r)
+				    :element-type 'bit
+				    :initial-element 0)))
+       (values model-name (equalp (state-matrix final-state) zero-model) (state-energy final-state))))
+    (:reassembly
+     (let* ((model (read-model-from-file src-model))
+	    (res-model (read-model-from-file tgt-model))
+	    (model-name (subseq (file-namestring src-model) 0 (- (position #\. (file-namestring src-model)) 4)))
+	    (r (model-resolution model))
+	    (bot (make-instance 'nanobot
+				:bid 1
+				:pos #(0 0 0)
+				:seeds (loop :for i :from 2 :to 20 :collect i)))
+	    (state (make-state :r r
+			       :harmonics :low
+			       :matrix (model-matrix model)
+			       :bots (list bot)
+			       :trace trace))
+	    (final-state (execute-state-trace state)))
+       (values model-name (equalp (state-matrix final-state) res-model) (state-energy final-state))))))
+
+(defun generate-trace-for-model (task-type src-model tgt-model tracer)
   "Load model from `model-file' and generate the trace for it
    using the specified `tracer'."
-  (let ((model (read-model-from-file model-file)))
-    (generate-trace tracer model)))
+  (case task-type
+    (:assembly
+     (let* ((model (read-model-from-file tgt-model))
+	    (trace (generate-trace tracer :assembly nil model)))
+       (format t ":assembly task: ~A~%" tgt-model)
+       (multiple-value-bind (model-name success energy) 
+	   (execute-trace-on-model-aux :assembly src-model tgt-model trace)
+	 (when success
+	   (with-open-file (stream (format nil "./traces/~A.nbt.~A" model-name energy)
+                            :direction :output
+                            :if-exists :supersede
+                            :if-does-not-exist :create
+                            :element-type '(unsigned-byte 8))
+	     (write-sequence (encode-commands trace) stream))))))
+    (:disassembly
+     (let* ((model (read-model-from-file src-model))
+	    (trace (generate-trace tracer :disassembly model nil)))
+       (format t ":disassembly task: ~A~%" src-model)
+       (multiple-value-bind (model-name success energy) 
+	   (execute-trace-on-model-aux :disassembly src-model tgt-model trace)
+	 (when success
+	   (with-open-file (stream (format nil "./traces/~A.nbt.~A" model-name energy)
+                            :direction :output
+                            :if-exists :supersede
+                            :if-does-not-exist :create
+                            :element-type '(unsigned-byte 8))
+	     (write-sequence (encode-commands trace) stream))))))
+    (:reassembly
+     (let* ((model (read-model-from-file src-model))
+	    (res-model (read-model-from-file tgt-model))
+	    (trace (generate-trace tracer :reassembly model res-model)))
+       (format t ":reassembly task: ~A ~A~%" src-model tgt-model)
+       (multiple-value-bind (model-name success energy) 
+	   (execute-trace-on-model-aux :reassembly src-model tgt-model trace)
+	 (when success
+	   (with-open-file (stream (format nil "./traces/~A.nbt.~A" model-name energy)
+                            :direction :output
+                            :if-exists :supersede
+                            :if-does-not-exist :create
+                            :element-type '(unsigned-byte 8))
+	     (write-sequence (encode-commands trace) stream))))))))
 
 (defun main ()
   (when sb-ext:*posix-argv*
     (let* ((parsed-args (apply-argv:parse-argv* sb-ext:*posix-argv*))
-	       (files))
+	   (src-file) (tgt-file))
       ;; (format t "~A~%~A~%" parsed-args (alexandria:plist-alist (cdr parsed-args)))
       (mapcar (lambda (p)
-		        (let ((o (string (car p)))
-		              (v (cdr p)))
-		          (cond
-		            ((string= "-f" o) (push v files)))))
-	          (alexandria:plist-alist (cdr parsed-args)))
-      ;; (format t "~A~%" files)
-      (dolist (f (reverse files))
-	(when (probe-file f)
-          (format *error-output* "Processing file ~A~%" f))))))
+		(let ((o (string (car p)))
+		      (v (cdr p)))
+		  (cond
+		    ((string= "-s" o) (setf src-file v))
+		    ((string= "-t" o) (setf tgt-file v)))))
+	      (alexandria:plist-alist (cdr parsed-args)))
+      (if (and src-file tgt-file)
+      	  (generate-trace-for-model :reassembly src-file tgt-file :trivial-low)
+      	  (if src-file
+      	      (generate-trace-for-model :disassembly src-file nil :trivial-low)
+      	      (generate-trace-for-model :assembly nil tgt-file :trivial-low))))))
 
 (defun get-best-traces ()
   (let ((best-res (make-hash-table :test #'equal)))
@@ -86,6 +177,8 @@
 					(format nil "./best_traces/~A.nbt" pr-name))
 				     :overwrite t)))))))
     ;;dump new version of results
-    (with-open-file (stream "./best_traces/results.txt" :direction :output :if-exists :supersede)
+    (with-open-file (stream "./best_traces/results.txt" :direction :output 
+			    :if-exists :supersede
+			    :if-does-not-exist :create)
       (format stream "~A" (alexandria::hash-table-alist best-res)))))
 

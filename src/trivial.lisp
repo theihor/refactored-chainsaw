@@ -6,7 +6,8 @@
         :src/coordinates-helper
         :src/commands
         :src/model
-        :src/grounded)
+        :src/grounded
+	:src/tracer)
   (:export #:moves-in-clear-space))
 
 (in-package :src/trivial)
@@ -123,8 +124,8 @@
                 (setf dx 0) (setf dy 0) (setf dz 0))))))
     (reverse moves)))
 
-(defmethod generate-trace ((tracer (eql :trivial)) model)
-  (let ((target-state (src/model:make-pseudo-state-from-model model))
+(defmethod generate-trace ((tracer (eql :trivial)) task-type src-model tgt-model)
+  (let ((target-state (src/model:make-pseudo-state-from-model tgt-model))
         (commands nil))
 
     (when (eq (state-harmonics target-state) :low)
@@ -155,9 +156,9 @@
 
         (reverse commands)))))
 
-(defmethod generate-trace ((tracer (eql :trivial-low)) model)
-  (let* ((target-state (src/model:make-pseudo-state-from-model model))
-         (r (model-resolution model))
+(defmethod generate-trace ((tracer (eql :trivial-low)) task-type src-model tgt-model)
+  (let* ((target-state (src/model:make-pseudo-state-from-model tgt-model))
+         (r (model-resolution tgt-model))
          (bot (make-instance 'nanobot
                              :bid 1
                              :pos #(0 0 0)
@@ -288,7 +289,7 @@
 
 (defun trivial-tracer (in-file out-file)
   (let* ((model (read-model-from-file in-file))
-         (commands (generate-trace :trivial-low model)))
+         (commands (generate-trace :trivial-low :assembly nil model)))
     (with-open-file (stream out-file
                             :direction :output
                             :if-exists :supersede
