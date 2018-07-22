@@ -77,24 +77,21 @@
                  (cluster-size (if (> area *bot-number*)
                                    (ceiling (/ area *bot-number*))
                                    1))
-                 (cluster-r (cond
-                              ((= area 1) 1)
-                              ((<= area 4) 2)
-                              ((<= area 9) 3)
-                              (t 4)))
-                 (x-cl (ceiling (/ dx cluster-r)))
-                 (z-cl (ceiling (/ dz cluster-r)))
+                 (r (ceiling (sqrt cluster-size)))
+                 (x-cl (ceiling (/ dx r)))
+                 (z-cl (ceiling (/ dz r)))
                  (cluster-number (* x-cl z-cl))
                  (total-voxels 0)
                  (clusters-ht (make-hash-table :test #'equalp)))
-            (loop :for x :from x1 :to x2 :by cluster-r
-               :do (loop :for z :from z1 :to z2 :by cluster-r
-                      :do (let ((cluster (make-region (make-point x1 0 z1)
-                                                      (make-point x2 0 z2)))
+            (loop :for x :from x1 :to x2 :by r
+               :do (loop :for z :from z1 :to z2 :by r
+                      :do (let ((cluster (make-region (make-point x 0 z)
+                                                      (make-point (+ x r) 0 (+ z r))))
                                 (voxels 0))
                             (loop :for y :from y1 :to z1
                                :do (when (voxel-full? state (make-point x y z))
                                      (incf voxels)
                                      (incf total-voxels)))
-                            (setf (gethash cluster clusters-ht) voxels))))
+                            (when (> voxels 0)
+                              (setf (gethash cluster clusters-ht) voxels)))))
             clusters-ht))))))
