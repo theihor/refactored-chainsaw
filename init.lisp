@@ -1,4 +1,4 @@
-(proclaim '(optimize (debug 3) (safety 3)))
+(proclaim '(optimize (debug 0) (safety 3)))
 
 (require 'sb-sprof)
 (require 'asdf)

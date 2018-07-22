@@ -52,7 +52,7 @@
   (:documentation "Execute command and change states"))
 
 (defmacro %bytes (size &rest bytes)
-  `(make-array ,size :element-type '(unsigned-byte 8) :initial-contents (list ,@bytes)))
+  `(list ,@bytes))
 
 (declaim (ftype (function (point) (values (unsigned-byte 2) (unsigned-byte 4))) encode-sld))
 (defun encode-sld (sld)
@@ -193,7 +193,7 @@
 
 (defun encode-commands (commands)
   "Encode commands and return octet vector."
-  (apply #'concatenate 'vector (mapcar #'encode-command commands)))
+  (coerce (alexandria:mappend #'encode-command commands) 'vector))
 
 
 ;;;------------------------------------------------------------------------------
