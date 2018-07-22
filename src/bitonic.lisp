@@ -211,18 +211,60 @@
               (setf section-level p-level
                     start-point p))))
         (push (make-instance 'section-info
-                             :points section
+                             :points (compute-section-tour
+                                      section start-point)
                              :level section-level
                              :start-point start-point)
               section-infos)))
-    (sort (copy-list section-infos)
-          #'<
-          :key #'section-level)))
+    (group-sections-by-level section-infos)
+    ;; (stable-sort
+    ;;  (copy-list section-infos)
+    ;;  #'<
+    ;;  :key #'section-level)
+    ))
 
-(defun compute-section-tour (info)
-  (let* ((points (bitonic-tour (section-points info)))
-         (start-index (position (section-start-point info)
-                                points
+(defun order-sections-by-proximity (infos)
+  (labels ((%section-ends (info)
+             (if (cdr (section-points info))
+                 (cons (first (section-points info))
+                       (last (section-points info)))
+                 (list (first (section-points info))))))
+    (let* ((point->section (make-hash-table :test #'equalp))
+           (visited (make-hash-table :test #'eq))
+           (endpoints-list (alexandria:mappend #'%section-ends infos))
+           (endpoints-tour (bitonic-tour endpoints-list))
+           (result nil))
+      (dolist (i infos)
+        (dolist (e (%section-ends i))
+          (setf (gethash e point->section) i)))
+      (dolist (e endpoints-tour)
+        (let ((section (gethash e point->section)))
+          (assert section)
+          (unless (gethash section visited)
+            (setf (gethash section visited) t)
+            (push section result))))
+      (reverse result))))
+
+(defun group-sections-by-level (infos)
+  (let ((level->sections (make-hash-table :test #'equalp)))
+    (dolist (i infos)
+      (push i (gethash (section-level i) level->sections)))
+    (maphash
+     (lambda (level infos)
+       (setf (gethash level level->sections)
+             (order-sections-by-proximity infos)))
+     level->sections)
+    (let* ((level/sections-sorted
+            (sort (copy-list
+                   (alexandria:hash-table-alist level->sections))
+                  #'<
+                  :key #'car))
+           (sections-sorted ;; [[Point]]
+            (mapcar #'cdr level/sections-sorted)))
+      (alexandria:flatten sections-sorted))))
+
+(defun compute-section-tour (points start-point)
+  (let* ((start-index (position start-point points
                                 :test #'equalp)))
     (assert start-index)
     (append
@@ -257,7 +299,7 @@
       (block outer
         (loop
            :for section :in sections
-           :for section-tour := (compute-section-tour section)
+           :for section-tour := (section-points section)
            :for section-number :from 1
            :do
            (loop :for coord :in section-tour :do
