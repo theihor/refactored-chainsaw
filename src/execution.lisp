@@ -6,7 +6,8 @@
         :src/coordinates
         :src/grounded
         :src/utils)
-  (:export #:execute-state-trace))
+  (:export #:execute-state-trace
+           #:execute-one-step))
 
 (in-package :src/execution)
 

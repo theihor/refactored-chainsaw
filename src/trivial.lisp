@@ -4,7 +4,8 @@
   (:use :src/coordinates
         :src/state
         :src/commands
-        :src/model)
+        :src/model
+        :src/grounded)
   (:export #:moves-in-clear-space))
 
 (in-package :src/trivial)
@@ -178,17 +179,17 @@
             (make-point x2 y2 z2)))))
 
 (defmethod generate-trace ((tracer (eql :trivial)) model)
-  (let ((state (src/model:make-pseudo-state-from-model model))
+  (let ((target-state (src/model:make-pseudo-state-from-model model))
         (commands nil))
 
-    (when (eq (state-harmonics state) :low)
+    (when (eq (state-harmonics target-state) :low)
       (push (make-instance 'flip) commands))
 
-    (let* ((region (compute-model-bounding-box state)))
+    (let* ((region (compute-model-bounding-box target-state)))
       (loop :for move :in (moves-in-clear-space #(0 0 0) (car region)) :do
            (push move commands))
       (multiple-value-bind (moves-and-fills bot-pos)
-          (generate-trivial-trace-for-region state region)
+          (generate-trivial-trace-for-region :state :gs target-state region)
         ;; (format t "bot-pos after filling: ~A~%" bot-pos)
         ;; (format t "moves to ~A: ~A~%"
         ;;         (make-point 0 (aref bot-pos 1) 0)
@@ -209,7 +210,50 @@
 
         (reverse commands)))))
 
-(defun generate-trivial-trace-for-region (state region)
+(defmethod generate-trace ((tracer (eql :trivial-low)) model)
+  (let* ((target-state (src/model:make-pseudo-state-from-model model))
+         (r (model-resolution model))
+         (bot (make-instance 'nanobot
+                             :bid 1
+                             :pos #(0 0 0)
+                             :seeds (loop :for i :from 2 :to 20 :collect i)))
+         (state (src/state:make-state :r r
+                                      :harmonics :low
+                                      :matrix (make-array (* r r r)
+                                                          :element-type 'bit
+                                                          :initial-element 0)
+                                      :bots (list bot)
+                                      :trace nil))
+         (gs (make-instance 'grounded-state))
+         (commands nil))
+
+    ;; (when (eq (state-harmonics state) :low)
+    ;;   (push (make-instance 'flip) commands))
+
+    (let* ((region (compute-model-bounding-box target-state)))
+      (loop :for move :in (moves-in-clear-space #(0 0 0) (car region)) :do
+           (push move commands))
+
+      (setf (state-trace state) (reverse commands))
+      (loop :while (state-trace state) :do
+           (src/execution:execute-one-step state gs))
+
+      (multiple-value-bind (moves-and-fills bot-pos)
+          (generate-trivial-trace-for-region state gs target-state region :use-gs t)
+        (loop :for m :in (append
+                          moves-and-fills
+                          (moves-in-clear-space
+                           bot-pos (make-point 0 (aref bot-pos 1) 0))
+                          (moves-in-clear-space
+                           (make-point 0 (aref bot-pos 1) 0) #(0 0 0)))
+           :do (push m commands))
+
+        ;; (push (make-instance 'flip) commands)
+        (push (make-instance 'halt) commands)
+        ;; (format t "commands: ~A~%" (reverse commands))
+        (reverse commands)))))
+
+(defun generate-trivial-trace-for-region (state gs target-state region &key (use-gs nil))
   "Assumes bot to be already in c1 of `region' and state with :high `harmonics'"
   (let ((commands nil)
         (bot-pos (car region)))
@@ -217,11 +261,34 @@
     (labels ((%move-to-and-fill (x y z)
                (let ((new-bot-pos (make-point x (1+ y) z))
                      (c (make-point x y z)))
-                 (when (voxel-full? state c)
-                   (setf commands (append (reverse (moves-in-clear-space bot-pos new-bot-pos))
-                                          commands))
-                   (setf bot-pos new-bot-pos)
-                   (push (make-instance 'fill :nd (make-point 0 -1 0)) commands)))))
+                 (when (voxel-full? target-state c)
+                   (let ((moves (moves-in-clear-space bot-pos new-bot-pos))
+                         (fill-cmd (make-instance 'fill
+                                                  :nd (make-point 0 -1 0))))
+
+                     (loop :for m :in moves :do (push m commands))
+
+                     (when use-gs
+                       (setf (state-trace state)
+                             (append moves (list fill-cmd)))
+                       (loop :while (state-trace state) :do
+                            (src/execution:execute-one-step state gs))
+                       ;; if after execution of fill new voxel,
+                       ;; system changed grounding
+                       ;; perform `flip' beforehand
+                       (cond ((and (eq (state-harmonics state) :low)
+                                   (not (grounded-check gs)))
+                              (setf (state-harmonics state) :high)
+                              (push (make-instance 'flip) commands)
+                              (push fill-cmd commands))
+                             ((and (eq (state-harmonics state) :high)
+                                   (grounded-check gs))
+                              (setf (state-harmonics state) :low)
+                              (push fill-cmd commands)
+                              (push (make-instance 'flip) commands))
+                             (t (push fill-cmd commands)))))
+
+                   (setf bot-pos new-bot-pos)))))
 
       (destructuring-bind (c1 . c2) region
         (with-coordinates (x1 y1 z1) c1
@@ -245,7 +312,7 @@
 
 (defun trivial-tracer (in-file out-file)
   (let* ((model (read-model-from-file in-file))
-         (commands (generate-trace :trivial model)))
+         (commands (generate-trace :trivial-low model)))
     (with-open-file (stream out-file
                             :direction :output
                             :if-exists :supersede

@@ -45,10 +45,11 @@
 (defun grounded-check (gs)
   (with-slots (uf-container coords)
       gs
-    (let ((coords-to-check coords))
+    (let ((coords-to-check coords)
+          (ungrounded nil))
       (loop :for coord :in coords-to-check
          :do (unless (eq (cl-containers:representative-node uf-container coord)
                          (cl-containers:representative-node uf-container :ground))
-               (return-from grounded-check nil)))
-      (setf coords nil))
-    t))
+               (push coord ungrounded)))
+      (setf coords ungrounded)
+      (null ungrounded))))

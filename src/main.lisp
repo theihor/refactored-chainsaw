@@ -43,15 +43,49 @@
   (when sb-ext:*posix-argv*
     (let* ((parsed-args (apply-argv:parse-argv* sb-ext:*posix-argv*))
 	       (files))
-      (format t "~A~%~A~%" parsed-args (alexandria:plist-alist (cdr parsed-args)))
+      ;; (format t "~A~%~A~%" parsed-args (alexandria:plist-alist (cdr parsed-args)))
       (mapcar (lambda (p)
 		        (let ((o (string (car p)))
 		              (v (cdr p)))
 		          (cond
 		            ((string= "-f" o) (push v files)))))
 	          (alexandria:plist-alist (cdr parsed-args)))
-      (format t "~A~%" files)
+      ;; (format t "~A~%" files)
       (dolist (f (reverse files))
 	(when (probe-file f)
           (format *error-output* "Processing file ~A~%" f))))))
+
+(defun get-best-traces ()
+  (let ((best-res (make-hash-table :test #'equal)))
+    ;; read initial best results
+    (when (probe-file "./best_traces/results.txt")
+      (with-open-file (stream "./best_traces/results.txt")
+	(let ((content (read stream)))
+	  (setf best-res (alexandria::alist-hash-table content)))))
+    ;; go over trace-folder files and fill hash table
+    (cl-fad::walk-directory 
+     "./traces" 
+     (lambda (f)
+       (let* ((name (file-namestring f))
+	      (e-str (subseq name (1+ (position #\. name :from-end t))))
+	      (pr-name (intern (subseq name 0 (position #\. name))))
+	      (energy))
+	 ;; (format t "~A~%" name)
+	 (setq energy (parse-integer e-str :junk-allowed t))
+	 (when (not (null energy))
+	   ;; (format t "energy:~A~%" energy)
+	   (aif (gethash pr-name best-res)
+		(when (< energy it)
+		  (setf (gethash pr-name best-res) energy)
+		  (cl-fad::copy-file f (pathname 
+					(format nil "./best_traces/~A.nbt" pr-name)) 
+				     :overwrite t))
+		(progn 
+		  (setf (gethash pr-name best-res) energy)
+		  (cl-fad::copy-file f (pathname 
+					(format nil "./best_traces/~A.nbt" pr-name))
+				     :overwrite t)))))))
+    ;;dump new version of results
+    (with-open-file (stream "./best_traces/results.txt" :direction :output :if-exists :supersede)
+      (format stream "~A" (alexandria::hash-table-alist best-res)))))
 

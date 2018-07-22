@@ -1,4 +1,4 @@
-(proclaim '(optimize (debug 3) (safety 3)))
+(proclaim '(optimize (debug 0) (safety 3)))
 
 (require 'sb-sprof)
 (require 'asdf)
@@ -35,7 +35,7 @@
 ;; (ql:quickload 'stmx)
 ;; (ql:quickload 'hyperluminal-mem)
 ;; (ql:quickload 'trivial-timeout)
-;; (ql:quickload 'cl-ppcre)
+(ql:quickload 'cl-ppcre)
 ;; (ql:quickload 'cl-mop)
 
 ;; (ql:quickload 'trivial-timeout)
