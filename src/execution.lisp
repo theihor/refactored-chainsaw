@@ -38,8 +38,7 @@
     (loop :for i :from 1
        :while (state-bots state) :do
          (assert (well-formed? state gs))
-         (execute-one-step state gs)
-         (when (> i 1000) (format t "bot-pos ~A: ~A~%" i (bot-pos (first (state-bots state)))))))
+         (execute-one-step state gs)))
   (format t "Energy at the end of simulation: ~A~%" (state-energy state))
   state)
 

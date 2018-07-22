@@ -35,6 +35,15 @@
 (defun make-point (c1 c2 c3)
   (make-array 3 :element-type 'fixnum :initial-contents (list c1 c2 c3)))
 
+(defmacro with-coordinates ((x y z) c-expr &body body)
+  (alexandria:with-gensyms (c)
+    `(let* ((,c ,c-expr)
+            (,x (aref ,c 0))
+            (,y (aref ,c 1))
+            (,z (aref ,c 2)))
+       (declare (ignorable ,x ,y ,z))
+       ,@body)))
+
 ;;(deftype region () ???)
 
 (defun make-region (p1 p2)
@@ -160,15 +169,6 @@ length of a coordinate difference is always a non-negative integer."
        (unless (%check i)
          (return-from inside-field? nil)))
     t))
-
-(defmacro with-coordinates ((x y z) c-expr &body body)
-  (alexandria:with-gensyms (c)
-    `(let* ((,c ,c-expr)
-            (,x (aref ,c 0))
-            (,y (aref ,c 1))
-            (,z (aref ,c 2)))
-       (declare (ignorable ,x ,y ,z))
-       ,@body)))
 
 (defun mapc-near (c r func)
   (with-coordinates (x y z) c
