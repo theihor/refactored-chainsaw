@@ -208,7 +208,7 @@
           :key #'section-level)))
 
 (defun compute-section-tour (info)
-  (let* ((points (section-points info))
+  (let* ((points (bitonic-tour (section-points info)))
          (start-index (position (section-start-point info)
                                 points
                                 :test #'equalp)))
