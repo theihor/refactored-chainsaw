@@ -2,9 +2,14 @@
     (:use :common-lisp
           :src/coordinates
           :src/state)
+  (:import-from :bit-smasher)
   (:export
    #:model-resolution
-   
+
+   #:make-pseudo-state-from-model
+
+   #:coordinates
+
    #:read-model
    #:read-model-from-file
    #:read-models-in-dir))
@@ -22,7 +27,10 @@
    ;; coordinate is array of three elements, see src/coordinate.lisp
    (coordinates :accessor model-coordinates
                 :initarg :coordinates
-                :initform nil)))
+                :initform nil)
+   (matrix :reader model-matrix
+           :initarg :matrix
+           :initform nil)))
 
 (defclass extended-model ()
   ((model :accessor regular-model
@@ -32,6 +40,9 @@
              :initarg :nanobots
              :initform nil)))
 
+(defun make-pseudo-state-from-model (model)
+  (make-state :r (model-resolution model)
+              :matrix (model-matrix model)))
 
 (defun decode-coordinate (encoded-coordinate-index bits-read-so-far resolution)
   (let ((stream-position
@@ -64,24 +75,28 @@
      collect
        (decode-coordinate encoded-coordinate-index bits-read-so-far resolution)))
 
-(defun make-coordinates (resolution full-coordinates)
+(defun make-matrix (resolution full-coordinates)
   (let ((bit-array (make-array (* resolution resolution resolution) :element-type 'bit)))
     (dolist (c full-coordinates bit-array)
-      (set-voxel-state 1 c bit-array))))
+      (set-voxel-state 1 c bit-array resolution))))
 
 (defun read-coordinates (resolution stream)
   "Reads full coordinates from STREAM with given RESOLUTION.
 Assumes RESOLUTION^(+DIMENSIONS+) bits"
-  (make-coordinates
-   resolution
-   (let ((expected-size (expt resolution +dimensions+)))
-     (loop
-        for bits-read-so-far = 0 then (+ bits-read-so-far +chunk-size+)
-        while (< bits-read-so-far expected-size)
+  (let* ((coordinates-list
+          (let ((expected-size (expt resolution +dimensions+)))
+            (loop
+               for bits-read-so-far = 0 then (+ bits-read-so-far +chunk-size+)
+               while (< bits-read-so-far expected-size)
 
-        for chunk = (read-byte stream)
-        unless (zerop chunk)
-        nconc (decode-full-coordinates chunk bits-read-so-far resolution)))))
+               for chunk = (read-byte stream)
+               unless (zerop chunk)
+               nconc (decode-full-coordinates chunk bits-read-so-far resolution))))
+         (matrix (make-matrix
+                  resolution
+                  coordinates-list)))
+    (values coordinates-list
+            matrix)))
 
 (defun read-resolution (stream)
   "Reads resolution for a model"
@@ -91,9 +106,18 @@ Assumes RESOLUTION^(+DIMENSIONS+) bits"
   "Reads a model from STREAM.
 Reads the first byte to determine the resolution. Then reads using 8 bit chunks."
   (let ((mdl (make-instance 'model)))
-    (with-slots (resolution coordinates) mdl
+    (with-slots (resolution coordinates matrix) mdl
       (setf resolution (read-resolution stream))
-      (setf coordinates (read-coordinates resolution stream)))
+      (let ((byte-array (make-array (ceiling (* resolution resolution resolution) 8)
+                                    :element-type '(unsigned-byte 8))))
+        (read-sequence byte-array stream)
+        (let ((bit-array (reverse (bit-smasher:bits<- (reverse byte-array)))))
+          (setf matrix bit-array)))
+      ;; (multiple-value-bind (coord-list m)
+      ;;     (read-coordinates resolution stream)
+      ;;   (setf coordinates coord-list)
+      ;;   (setf matrix m))
+      )
     mdl))
 
 (defun read-model-from-file (filename)

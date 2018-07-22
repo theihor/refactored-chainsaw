@@ -45,6 +45,7 @@
 
 (ql:quickload 'let-plus)
 (ql:quickload 'optima)
+(ql:quickload 'bit-smasher)
 
 (in-package :cl-user)
 

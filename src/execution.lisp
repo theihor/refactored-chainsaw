@@ -12,7 +12,7 @@
 
 (defun well-formed? (s gs)
   (and (if (eq (state-harmonics s) :low)
-           (grounded-check gs)
+           (if (not (grounded-check gs)) (error "NOT GROUNDED") t)
            t)
        (progn
          (loop :for (b . rest) :on (state-bots s) :do
@@ -38,8 +38,8 @@
     (loop :for i :from 1
        :while (state-bots state) :do
          (assert (well-formed? state gs))
-         (execute-one-step state gs)
-         (format t "Energy at step ~A: ~A~%" i (state-energy state))))
+         (execute-one-step state gs)))
+  (format t "Energy at the end of simulation: ~A~%" (state-energy state))
   state)
 
 (defun group-bots (bot-command-alist)
@@ -81,13 +81,13 @@
 
     groups))
 
-(defun check-volatile-regions (region-groups)
+(defun check-volatile-regions (region-groups r)
   "`region-groups' is list of lists of regions "
   (let ((points (make-hash-table :test #'eq)))
     (loop :for region-group :in region-groups :do
          (loop :for region :in region-group :do
               (loop :for point :in (region-points region) :do
-                   (let ((i (matrix-index point)))
+                   (let ((i (matrix-index point r)))
                      (if (gethash i points)
                          (error "Volatile regions intersect: ~A~%"
                                 region-groups)
@@ -105,7 +105,7 @@
             (loop :for group :in groups :collect
                  (loop :for (bot . cmd) :in group :append
                       (get-volatile-regions cmd bot)))))
-      (check-volatile-regions volatile-region-groups)
+      (check-volatile-regions volatile-region-groups r)
       (loop :for group :in groups :do
            (loop :for (bot . cmd) :in group :do
                 (unless (check-preconditions

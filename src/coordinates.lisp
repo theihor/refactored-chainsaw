@@ -16,7 +16,10 @@
            #:with-coordinates
            #:inside-field?
            #:mapc-adjacent
-           #:+dimensions+))
+           #:+dimensions+
+           #:ident-vec
+           #:mapc-near
+           #:copy-point))
 
 (in-package :src/coordinates)
 
@@ -32,6 +35,15 @@
 (defun make-point (c1 c2 c3)
   (make-array 3 :element-type 'fixnum :initial-contents (list c1 c2 c3)))
 
+(defmacro with-coordinates ((x y z) c-expr &body body)
+  (alexandria:with-gensyms (c)
+    `(let* ((,c ,c-expr)
+            (,x (aref ,c 0))
+            (,y (aref ,c 1))
+            (,z (aref ,c 2)))
+       (declare (ignorable ,x ,y ,z))
+       ,@body)))
+
 ;;(deftype region () ???)
 
 (defun make-region (p1 p2)
@@ -39,7 +51,7 @@
 
 (defun pos-add (c1 c2)
   "Adds two coordinates"
-  (aops:each #'+ c1 c2))
+  (aops:each* 'fixnum #'+ c1 c2))
 
 (defun copy-point (p)
   (make-array 3 :element-type 'fixnum :initial-contents p))
@@ -49,7 +61,11 @@
 to another and is written <dx, dy, dz>, where dx, dy, and dz are (positive or
 negative) integers. Adding distance d = <dx, dy, dz> to coordinate c = <x, y,
 z>, written c + d, yields the coordinate <x + dx, y + dy, z + dz>."
-  (aops:each #'- c1 c2))
+  (with-coordinates (x1 y1 z1) c1
+    (with-coordinates (x2 y2 z2) c2
+      (make-point (- x1 x2)
+                  (- y1 y2)
+                  (- z1 z2)))))
 
 (defun pos-eq (c1 c2)
   (equalp c1 c2))
@@ -68,9 +84,20 @@ difference d = <dx, dy, dz> is written clen(d) and defined as max(|dx|, |dy|,
 length of a coordinate difference is always a non-negative integer."
   (reduce #'max (aops:each #'abs diff)))
 
+(defun diff-lens (c1 c2)
+  (with-coordinates (x1 y1 z1) c1
+    (with-coordinates (x2 y2 z2) c2
+      (let ((dx (abs (- x1 x2)))
+            (dy (abs (- y1 y2)))
+            (dz (abs (- z1 z2))))
+        (values (+ dx dy dz)
+                (max dz dy dz))))))
+
 (defun adjacent? (c1 c2)
-  (let ((d (pos-diff c1 c2)))
-    (= (mlen d) 1)))
+  (multiple-value-bind (mlen clen)
+      (diff-lens c1 c2)
+    (declare (ignore clen))
+    (= mlen 1)))
 
 (defun mapc-adjacent (c r func)
   (loop :for component :below 3
@@ -108,6 +135,12 @@ length of a coordinate difference is always a non-negative integer."
   (and (<= (mlen diff) 2)
        (= (clen diff) 1)))
 
+(defun near? (c1 c2)
+  (multiple-value-bind (mlen clen)
+      (diff-lens c1 c2)
+    (and (<= mlen 2)
+         (= clen 1))))
+
 ;; region is a cons of two coordinates (c1 . c2)
 
 (defun in-region (c r)
@@ -137,13 +170,25 @@ length of a coordinate difference is always a non-negative integer."
          (return-from inside-field? nil)))
     t))
 
-(defmacro with-coordinates ((x y z) c-expr &body body)
-  (alexandria:with-gensyms (c)
-    `(let* ((,c ,c-expr)
-            (,x (aref ,c 0))
-            (,y (aref ,c 1))
-            (,z (aref ,c 2)))
-       ,@body)))
+(defun mapc-near (c r func)
+  (with-coordinates (x y z) c
+    (loop :for dx :in '(-1 0 1)
+       :do (loop :for dy :in '(-1 0 1)
+              :do (loop :for dz :in '(-1 0 1)
+                     :do (let ((c1 (make-point (+ x dx)
+                                               (+ y dy)
+                                               (+ z dz))))
+                           (when (and
+                                  (near? c c1)
+                                  (inside-field? c1 r))
+                             (funcall func c1))))))))
+
+(defun ident-vec (coord)
+  (labels ((%one (val)
+             (signum val)))
+    (with-coordinates (x y z)
+        coord
+      (make-point (%one x) (%one y) (%one z)))))
 
 (defun region-dimension (r)
   "The dimension of a region r = [(x1, y1, z1), (x2, y2, z2)] is written dim(r)
