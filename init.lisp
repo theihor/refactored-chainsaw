@@ -35,7 +35,7 @@
 ;; (ql:quickload 'stmx)
 ;; (ql:quickload 'hyperluminal-mem)
 ;; (ql:quickload 'trivial-timeout)
-;; (ql:quickload 'cl-ppcre)
+(ql:quickload 'cl-ppcre)
 ;; (ql:quickload 'cl-mop)
 
 ;; (ql:quickload 'trivial-timeout)
