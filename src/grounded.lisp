@@ -5,6 +5,7 @@
   (:import-from :cl-containers)
   (:export #:grounded-state
            #:grounded-add-voxel
+           #:grounded-rm-voxel
            #:grounded-check))
 
 (in-package :src/grounded)
@@ -41,6 +42,10 @@
          (cl-containers:graft-nodes
           (cl-containers:representative-node uf-container coord)
           (cl-containers:representative-node uf-container :ground)))))))
+
+(defun grounded-rm-voxel (gs coord state)
+  ;; TODO(mrwhythat): implement
+  )
 
 (defun grounded-check (gs)
   (with-slots (uf-container coords)

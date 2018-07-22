@@ -82,30 +82,43 @@
     (labels ((%iter (coords)
                ;; (format t "Front: ~A~%" coords)
                (let ((new-front nil))
-                 (loop :for coord :in coords
-                    :do (if (and (target-set-get coord targets)
-                                 (or (null same-level)
-                                     (= (aref coord 1)
-                                        (aref start-coord 1))))
-                            (return-from shortest-path
-                              (values
-                               coord
-                               (cdr (reverse (gethash coord wave)))))
-                            (try-moves
-                             coord
-                             (lambda (coord1)
-                               (and (inside-field? coord1 (state-r state))
-                                    (not (voxel-full? state coord1))
-                                    (or (null same-level)
-                                        (= (aref coord 1)
-                                           (aref start-coord 1)))))
-                             (lambda (coord-list)
-                               (let ((coord1 (car (last coord-list))))
-                                 (when (null (gethash coord1 wave))
-                                   (push coord1 new-front)
-                                   (setf (gethash coord1 wave)
-                                         (cons (coords-to-move coord coord-list)
-                                               (gethash coord wave)))))))))
+                 (let ((found-list (loop :for coord :in coords
+                                      :append (if (and (target-set-get coord targets)
+                                                       (or (null same-level)
+                                                           (= (aref coord 1)
+                                                              (aref start-coord 1))))
+                                                  (list coord)
+                                                  nil))))
+                   (when found-list
+                     (let ((the-one nil)
+                           (the-one-dy nil)
+                           (the-one-mlen nil))
+                       (loop :for found :in found-list
+                          :do (let ((found-dy (abs (- (aref found 1) (aref start-coord 1))))
+                                    (found-mlem (diff-lens start-coord found)))
+                                (when (or (null the-one)
+                                          (< found-dy the-one-dy)
+                                          (< found-mlem the-one-mlen))
+                                  (setf the-one found
+                                        the-one-dy found-dy
+                                        the-one-mlen found-mlem))))
+                       (return-from shortest-path the-one)))
+                   (loop :for coord :in coords
+                      :do (try-moves
+                           coord
+                           (lambda (coord1)
+                             (and (inside-field? coord1 (state-r state))
+                                  (not (voxel-full? state coord1))
+                                  (or (null same-level)
+                                      (= (aref coord 1)
+                                         (aref start-coord 1)))))
+                           (lambda (coord-list)
+                             (let ((coord1 (car (last coord-list))))
+                               (when (null (gethash coord1 wave))
+                                 (push coord1 new-front)
+                                 (setf (gethash coord1 wave)
+                                       (cons (coords-to-move coord coord-list)
+                                             (gethash coord wave)))))))))
                  ;; (format t "New front: ~A~%" new-front)
                  (when new-front
                    (%iter new-front)))))
@@ -127,8 +140,9 @@
   sign)
 
 (defun dir-to? (coord1 coord2 dir)
-  (let ((comp-val (aref (pos-diff coord2 coord1) (fill-direction-component dir))))
-    (= (signum comp-val) (fill-direction-sign dir))))
+  (let* ((comp-val (aref (pos-diff coord2 coord1) (fill-direction-component dir)))
+         (res (= (signum comp-val) (fill-direction-sign dir))))
+    res))
 
 (defstruct trg-set
   tab
@@ -228,6 +242,12 @@
                                    :sld1 (first (move-diffs move))
                                    :sld2 (second (move-diffs move)))))))
 
+(defparameter *directions*
+  (loop :for component :in '(1)
+     :append (loop :for sign :in '(-1 1)
+                :collect (make-fill-direction :component component
+                                              :sign sign))))
+
 (defun go-sucker (true-model)
   (let* ((res-trace nil)
          (bot-coord (make-point 0 0 0))
@@ -241,8 +261,8 @@
                             :bots nil
                             :trace nil))
          (fill-set (initial-to-fill-set model))
-         (dir (make-fill-direction :component 1
-                                   :sign -1))
+         (dir (first *directions*))
+         (dir-next-ind 1)
          (target-set (fill-set-to-target-set dir fill-set state)))
     (labels ((%commands (commands)
                (push commands res-trace))
@@ -255,15 +275,28 @@
                       (dummy (target-set-put coord tab))
                       (moves (nth-value 1 (shortest-path bot-coord tab state))))
                  (declare (ignore dummy))
-                 (%commands (moves-to-commands moves)))))
+                 (%commands (moves-to-commands moves))))
+             (%change-dir ()
+               (prog1
+                   (if (>= dir-next-ind (length *directions*))
+                       (progn
+                         (format t "Change dir failed~%")
+                         nil)
+                       (progn
+                         (format t "Change dir~%")
+                         (setf dir (nth dir-next-ind *directions*))
+                         (setf target-set
+                               (fill-set-to-target-set dir fill-set state))
+                         t))
+                 (incf dir-next-ind))))
       (loop
          :do (progn
-               ;; (format t "Step: ~A~%" (reduce #'+ (mapcar #'length res-trace)))
-               ;; (format t "Bot: ~A~%" bot-coord)
-               ;; (format t "Fill set: ~A~%" (alexandria:hash-table-keys fill-set))
-               ;; (format t "Target set: ~A~%" (alexandria:hash-table-keys (trg-set-tab target-set)))
+               (format t "Step: ~A~%" (reduce #'+ (mapcar #'length res-trace)))
+               (format t "Bot: ~A~%" bot-coord)
+               (format t "Fill set: ~A~%" (alexandria:hash-table-keys fill-set))
+               (format t "Target set: ~A~%" (alexandria:hash-table-keys (trg-set-tab target-set)))
                (let ((coord (find-to-fill dir bot-coord fill-set state)))
-                 ;; (format t "Can fill coord: ~A~%" coord)
+                 (format t "Can fill coord: ~A~%" coord)
                  (if coord
                      (progn
                        (%commands (list (make-instance 'fill
@@ -272,7 +305,13 @@
                        (update-fill-set coord fill-set state model)
                        (update-target-set dir coord fill-set target-set state))
                      (if (= (target-set-count target-set) 0)
-                         (return)
+                         (if (= (hash-table-count fill-set) 0)
+                             (return)
+                             ;; Try to change direction
+                             (if (%change-dir)
+                                 nil
+                                 ;; Oops - totally stuck
+                                 (return)))
                          (multiple-value-bind (goto-coord moves)
                              (shortest-path bot-coord target-set state
                                             :same-level
@@ -280,13 +319,20 @@
                                                 t
                                                 nil))
                            ;; (format t "Then goto ~A~%" goto-coord)
-                           (unless goto-coord
-                             (return)
-                             ;; (error "AAAAAA")
-                             )
-                           (%commands (moves-to-commands moves))
-                           (target-set-remove goto-coord target-set)
-                           (setf bot-coord goto-coord)))))))
+                           (if goto-coord
+                               (progn
+                                 ;; Reset direction changer
+                                 (setf dir-next-ind 0)
+                                 (%commands (moves-to-commands moves))
+                                 (target-set-remove goto-coord target-set)
+                                 (setf bot-coord goto-coord))
+                               ;; Try to change direction
+                               (if (%change-dir)
+                                   nil
+                                   ;; Oops - totally stuck
+                                   (return))
+                               ;; (error "AAAAAA")
+                               )))))))
       (unless (pos-eq bot-coord (make-point 0 0 0))
         (%move-to (make-point 0 0 0)))
       (%halt)

@@ -52,7 +52,8 @@
          (setf neighbour
                (or neighbour
                    (when (= (aref grounded-matrix neighbour-index) +grounded+)
-                     neighbour-index))))))))
+                     neighbour-index))))))
+    neighbour))
 
 (defun make-ground-checker (grounded-matrix)
   (lambda (coordinate matrix resolution)
@@ -113,7 +114,7 @@ If voxel A is grounded because of several voxels, then build just a single edge 
          (resolution (model-resolution model))
          ;; Used to track grounded voxels
          (grounded-matrix (make-array (length matrix) :element-type 'bit))
-         (dep-graph (cl-graph:make-graph 'cl-graph:basic-graph)))
+         (dep-graph (cl-graph:make-graph 'cl-graph:graph-container)))
     (mark-0th-floor-grounded resolution matrix grounded-matrix dep-graph)
     (mark-grounded-bottom-up resolution matrix grounded-matrix dep-graph)
     (mark-grounded-top-down resolution matrix grounded-matrix dep-graph)

@@ -29,6 +29,7 @@
    #:check-preconditions
    #:execute
    #:check-preconditions
+   #:group-region
    ))
 
 (in-package :src/commands)
@@ -326,7 +327,7 @@
            nbpos))))
 
 (defmethod check-preconditions ((cmd lmove) (state state) group)
-  (let* ((bot (car (car (first group))))
+  (let* ((bot (car (first group)))
          (bpos (bot-pos bot))
          (mbpos (pos-add bpos (sld1 cmd)))
          (nbpos (pos-add mbpos (sld2 cmd)))
