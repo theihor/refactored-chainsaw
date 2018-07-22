@@ -29,6 +29,7 @@
    #:check-preconditions
    #:execute
    #:check-preconditions
+   #:group-region
    ))
 
 (in-package :src/commands)

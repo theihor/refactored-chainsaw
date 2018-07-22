@@ -152,8 +152,13 @@
                (typecase cmd
                  (src/commands:fill
                   (grounded-add-voxel gs (pos-add (bot-pos bot) (nd cmd)) state))
-                 ;; (void
-                 ;;  (grounded-rm-voxel gs))
-                 )))
+                 (src/commands:void
+                  (grounded-rm-voxel gs (pos-add (bot-pos bot) (nd cmd)) state))
+                 (src/commands:gfill
+                  (dolist (c (region-points (group-region group)))
+                    (grounded-add-voxel gs c state)))
+                 (src/commands:gvoid
+                  (dolist (c (region-points (group-region group)))
+                    (grounded-rm-voxel gs c state))))))
 
       (setf trace (nthcdr n trace)))))
