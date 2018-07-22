@@ -178,6 +178,13 @@
    (start-point :accessor section-start-point
                 :initarg :start-point)))
 
+(defun split-into-sections-by-level (points voxel->level)
+  (let ((level->points (make-hash-table :test #'equalp)))
+    (dolist (p points)
+      (let ((p-level (gethash p voxel->level)))
+        (push p (gethash p-level level->points))))
+    (alexandria:hash-table-values level->points)))
+
 (defun rank-sections (state)
   (let* ((voxel->level
           (time
@@ -188,6 +195,11 @@
               (split-into-sections
                state
                (plane-points state y)))))
+         (sections
+          (alexandria:mappend
+           (lambda (points)
+             (split-into-sections-by-level points voxel->level))
+           sections))
          (section-infos nil))
     (dolist (section sections)
       (let ((section-level nil)
@@ -276,3 +288,13 @@
                            src-model
                            tgt-model)
   (bitonic-bot tgt-model))
+
+(defun run-bitonic (in-file res-file)
+  (let* ((true-model (read-model-from-file in-file))
+         (commands (bitonic-bot true-model)))
+    (with-open-file (stream res-file
+                            :direction :output
+                            :if-exists :supersede
+                            :if-does-not-exist :create
+                            :element-type '(unsigned-byte 8))
+      (write-sequence (encode-commands commands) stream))))
