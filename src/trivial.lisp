@@ -204,54 +204,85 @@
         (bot-pos (car region)))
 
     (labels ((%move-to-and-fill (x y z)
-               (let ((new-bot-pos (make-point x (1+ y) z))
-                     (c (make-point x y z)))
-                 (when (voxel-full? target-state c)
-                   (let ((moves (moves-in-clear-space bot-pos new-bot-pos))
-                         (fill-cmd (make-instance 'fill
-                                                  :nd (make-point 0 -1 0))))
+               (let* ((new-bot-pos (make-point x (1+ y) z))
+                      (c0 (make-point x y z))
+                      (voxels-to-fill (list c0)))
 
-                     (loop :for m :in moves :do (push m commands))
+                 (loop :for dx :in '(-1 0 1)
+                    :do (loop :for dz :in '(-1 0 1)
+                           :do (let ((c1 (make-point (+ x dx)
+                                                     y
+                                                     (+ z dz))))
+                                 (when (and (near? new-bot-pos c1)
+                                            (inside-field? c1 (state-r target-state)))
+                                   (push c1 voxels-to-fill)))))
 
-                     (when use-gs
-                       (setf (state-trace state)
-                             (append moves (list fill-cmd)))
-                       (loop :while (state-trace state) :do
-                            (src/execution:execute-one-step state gs))
-                       ;; if after execution of fill new voxel,
-                       ;; system changed grounding
-                       ;; perform `flip' beforehand
-                       (cond ((and (eq (state-harmonics state) :low)
-                                   (not (grounded-check gs)))
-                              (setf (state-harmonics state) :high)
-                              (push (make-instance 'flip) commands)
-                              (push fill-cmd commands))
-                             ((and (eq (state-harmonics state) :high)
-                                   (grounded-check gs))
-                              (setf (state-harmonics state) :low)
-                              (push fill-cmd commands)
-                              (push (make-instance 'flip) commands))
-                             (t (push fill-cmd commands)))))
+                 (let ((moves (moves-in-clear-space bot-pos new-bot-pos))
+                       (moved? nil))
+                   (loop :for c :in voxels-to-fill :do
+                        (when (and (voxel-full? target-state c)
+                                   (voxel-void? state c))
 
-                   (setf bot-pos new-bot-pos)))))
+                          (unless moved?
+                            (loop :for m :in moves :do (push m commands))
+                            (when use-gs
+                              (setf (state-trace state) moves)
+                              (loop :while (state-trace state) :do
+                                   (src/execution:execute-one-step state gs)))
+                            (setf moved? t)
+                            (setf bot-pos new-bot-pos))
+
+                          (let ((fill-cmd (make-instance 'fill :nd (pos-diff c new-bot-pos))))
+                            (if use-gs
+                                (progn
+                                  (setf (state-trace state) (list fill-cmd))
+                                  (src/execution:execute-one-step state gs)
+                                  ;; if after execution of fill new voxel,
+                                  ;; system changed grounding
+                                  ;; perform `flip' beforehand
+                                  (cond (;; low -> high
+                                         (and (eq (state-harmonics state) :low)
+                                              (not (grounded-check gs)))
+                                         (setf (state-harmonics state) :high)
+                                         (push (make-instance 'flip) commands)
+                                         (push fill-cmd commands))
+                                        (;; high -> low
+                                         (and (eq (state-harmonics state) :high)
+                                              (grounded-check gs))
+                                         (setf (state-harmonics state) :low)
+                                         (push fill-cmd commands)
+                                         (push (make-instance 'flip) commands))
+                                        ;; otherwise just fill
+                                        (t (push fill-cmd commands))))
+                                (push fill-cmd commands)))))
+                   )
+                 )))
 
       (destructuring-bind (c1 . c2) region
         (with-coordinates (x1 y1 z1) c1
           (with-coordinates (x2 y2 z2) c2
-            (loop :for y :from y1 :to y2 :do
-                 (if (oddp y)
-                     (loop :for x :from x1 :to x2 :do
-                          (if (oddp x)
-                              (loop :for z :from z1 :to z2 :do
-                                   (%move-to-and-fill x y z))
-                              (loop :for z :from z2 :downto z1 :do
-                                   (%move-to-and-fill x y z))))
-                     (loop :for x :from x2 :downto x1 :do
-                          (if (oddp x)
-                              (loop :for z :from z1 :to z2 :do
-                                   (%move-to-and-fill x y z))
-                              (loop :for z :from z2 :downto z1 :do
-                                   (%move-to-and-fill x y z))))))))))
+            ;; since we ar filling every 3 lines
+            ;; traverse appropriately
+            (multiple-value-bind (x-start x-end)
+                ;; (values x1 x2)
+                (case (mod (1+ (- x2 x1)) 3)
+                  (0 (values (1+ x1) (1- x2)))
+                  (1 (values x1 x2))
+                  (2 (values (1+ x1) x2)))
+              (loop :for y :from y1 :to y2 :do
+                   (if (oddp y)
+                       (loop :for x :from x-start :to x-end :by 3 :do
+                            (if (oddp x)
+                                (loop :for z :from z1 :to z2 :do
+                                     (%move-to-and-fill x y z))
+                                (loop :for z :from z2 :downto z1 :do
+                                     (%move-to-and-fill x y z))))
+                       (loop :for x :from x-end :downto x-start :by 3 :do
+                            (if (oddp x)
+                                (loop :for z :from z1 :to z2 :do
+                                     (%move-to-and-fill x y z))
+                                (loop :for z :from z2 :downto z1 :do
+                                     (%move-to-and-fill x y z)))))))))))
 
     (values (reverse commands) bot-pos)))
 
