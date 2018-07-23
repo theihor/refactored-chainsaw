@@ -58,7 +58,10 @@
                                            (pos-eq (bot-pos (car b.c))
                                                    (pos-add (bot-pos bot) (nd cmd)))))
                                     alist)))
-                      (push (list bot-cmd bot2-cmd2) groups)
+                      (push (if (typep cmd 'fusionp)
+                                (list bot-cmd bot2-cmd2)
+                                (list bot2-cmd2 bot-cmd))
+                            groups)
                       (setf alist (remove bot2-cmd2 alist :test #'eq))))
                    ((or gfill gvoid)
                     (push
