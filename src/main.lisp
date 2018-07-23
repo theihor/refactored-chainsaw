@@ -34,7 +34,7 @@
 	    (bot (make-instance 'nanobot
 				:bid 1
 				:pos #(0 0 0)
-				:seeds (loop :for i :from 2 :to 20 :collect i)))
+				:seeds (loop :for i :from 2 :to 40 :collect i)))
 	    (state (make-state :r r
 			       :harmonics :low
 			       :matrix (make-array (* r r r)

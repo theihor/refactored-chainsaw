@@ -56,7 +56,7 @@
                                       (and (typep (cdr b.c) '(or fusions fusionp))
                                            (not (typep (cdr b.c) (type-of cmd)))
                                            (pos-eq (bot-pos (car b.c))
-                                                   (nd cmd))))
+                                                   (pos-add (bot-pos bot) (nd cmd)))))
                                     alist)))
                       (push (list bot-cmd bot2-cmd2) groups)
                       (setf alist (remove bot2-cmd2 alist :test #'eq))))
