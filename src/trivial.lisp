@@ -248,7 +248,7 @@
            (setf (bot-pos bot) (car region))
            (multiple-value-bind (bot-commands new-bot-pos)
                (generate-trivial-trace-for-region
-                state gs target-state region :use-gs t)
+                state gs target-state region :use-gs nil)
              (setf (gethash bid bid->cmds) (remove-if (lambda (c) (typep c 'flip)) bot-commands))
              (setf (gethash bid bid->pos) new-bot-pos)))
 
