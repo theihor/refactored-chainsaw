@@ -151,7 +151,7 @@
                                  (cluster (make-region (make-point x 0 z)
                                                        (make-point dx 0 dz)))
                                  (voxels 0))
-                            (loop :for y :from y1 :to z1
+                            (loop :for y :from y1 :to y2
                                :do (loop :for xi :from x :to dx
                                       :do (loop :for zi :from z :to dz
                                              :do (when (voxel-full? state (make-point xi y zi))
