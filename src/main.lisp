@@ -34,7 +34,7 @@
 	    (bot (make-instance 'nanobot
 				:bid 1
 				:pos #(0 0 0)
-				:seeds (loop :for i :from 2 :to 20 :collect i)))
+				:seeds (loop :for i :from 2 :to 40 :collect i)))
 	    (state (make-state :r r
 			       :harmonics :low
 			       :matrix (make-array (* r r r)
@@ -145,7 +145,7 @@
       	  (generate-trace-for-model :reassembly src-file tgt-file :trivial-low)
       	  (if src-file
       	      (generate-trace-for-model :disassembly src-file nil :trivial-low)
-      	      (generate-trace-for-model :assembly nil tgt-file :trivial-low))))))
+      	      (generate-trace-for-model :assembly nil tgt-file :trivial-parallel))))))
 
 (defun get-best-traces ()
   (let ((best-res (make-hash-table :test #'equal)))
