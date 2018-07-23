@@ -133,26 +133,30 @@
          (pd (pos-diff c2 c1)))
     (with-coordinates (x1 y1 z1) c1
       (with-coordinates (x2 y2 z2) c2
-        (with-coordinates (dx dy dz) pd
-          (let* ((area (* dx dz))
+        (with-coordinates (bdx bdy bdz) pd
+          (let* ((area (* bdx bdz))
                  (cluster-size (if (> area *bot-number*)
                                    (ceiling (/ area *bot-number*))
                                    1))
                  (r (ceiling (sqrt cluster-size)))
-                 ;; (x-cl (ceiling (/ dx r)))
-                 ;; (z-cl (ceiling (/ dz r)))
+                 ;; (x-cl (ceiling (/ bdx r)))
+                 ;; (z-cl (ceiling (/ bdz r)))
                  ;; (cluster-number (* x-cl z-cl))
                  (total-voxels 0)
                  (clusters-ht (make-hash-table :test #'equalp)))
             (loop :for x :from x1 :to x2 :by r
                :do (loop :for z :from z1 :to z2 :by r
-                      :do (let ((cluster (make-region (make-point x 0 z)
-                                                      (make-point (1- (+ x r)) 0 (1- (+ z r)))))
-                                (voxels 0))
+                      :do (let* ((dx (1- (+ x r)))
+                                 (dz (1- (+ z r)))
+                                 (cluster (make-region (make-point x 0 z)
+                                                       (make-point dx 0 dz)))
+                                 (voxels 0))
                             (loop :for y :from y1 :to y2
-                               :do (when (voxel-full? state (make-point x y z))
-                                     (incf voxels)
-                                     (incf total-voxels)))
+                               :do (loop :for xi :from x :to dx
+                                      :do (loop :for zi :from z :to dz
+                                             :do (when (voxel-full? state (make-point xi y zi))
+                                                   (incf voxels)
+                                                   (incf total-voxels)))))
                             (when (> voxels 0)
                               (setf (gethash cluster clusters-ht) voxels)))))
             clusters-ht))))))
