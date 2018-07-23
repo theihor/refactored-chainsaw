@@ -202,7 +202,7 @@
              (if (every (lambda (c) (eq c :none)) lst)
                  (remhash bid bid->cmds)
                  (setf (gethash bid bid->cmds) (reverse lst)))))
-      (format t "flips: ~A~%" flip-steps)
+      ;; (format t "flips: ~A~%" flip-steps)
       ;; now we have commands matrix
       ;; lets put flips and waits in appropriate places
       ;; number of commands (and :none-s) in table should be the same for every bid
@@ -242,7 +242,7 @@
                    (remove :none (gethash bid bid->cmds))))
         ;; (maphash (lambda (bid lst) (format t "bid ~A lst ~A~%" bid (length lst)))
         ;;         bid->cmds)
-        (format t "count-list: ~A~%" (reverse count-list))
+        ;; (format t "count-list: ~A~%" (reverse count-list))
         ;; finally, sort new commands sequence and return it
         (sort-commands-for-bots bid->cmds (reverse count-list))
         ))))
