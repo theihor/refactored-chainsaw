@@ -62,7 +62,7 @@
                                      (make-list (- steps n)
                                                 :initial-element (1+ n))
                                      nil))))
-        (format t "steps = ~A; count-list: ~A~%" steps count-list)
+        ;; (format t "steps = ~A; count-list: ~A~%" steps count-list)
         (sort-commands-for-bots bot->cmds count-list)))))
 
 ;; (defun spawn-in-line (bot region &key (n :all) (commands-acc nil) (spawned))
