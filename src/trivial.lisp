@@ -152,6 +152,105 @@
          (count-list (make-list steps :initial-element (hash-table-count bid->cmds))))
     count-list))
 
+(defun introduce-flips (model commands)
+  (let* ((r (model-resolution model))
+         (n 40)
+	     (bot (make-instance 'nanobot
+				             :bid 1
+				             :pos #(0 0 0)
+				             :seeds (loop :for i :from 2 :to n :collect i)))
+	     (state (make-state :r r
+			                :harmonics :low
+			                :matrix (make-array (* r r r)
+						                        :element-type 'bit
+						                        :initial-element 0)
+			                :bots (list bot)
+			                :trace commands))
+         (gs (make-instance 'grounded-state)))
+
+    (let ((bid->cmds (make-hash-table :test #'eq))
+          (was-grounded? (eq (state-harmonics state) :low))
+          (flip-steps nil))
+      ;; run the simulation and see, on which steps flip is appropriate/necessary
+      (loop :for i :from 0
+         :while (state-bots state) :do
+           (let* (;; (well-formed? (src/execution::well-formed? state gs))
+                  (is-grounded? (grounded-check gs)
+                    ;; (and well-formed?
+                    ;;      (eq (state-harmonics state) :low))
+                    ))
+             ;; (assert well-formed?)
+             (unless (eq was-grounded? is-grounded?)
+               (push (cons i (if is-grounded? :low :high))
+                     flip-steps))
+             (setf was-grounded? is-grounded?))
+         ;; also fill `bid->cmds' table to generate new commands sequence later
+           (loop
+              :for bid :in (sort (mapcar #'bot-bid (state-bots state)) #'<)
+              :for cmd :in (take (length (state-bots state)) (state-trace state))
+              :do ;; replace present flips with waits
+                (if (typep cmd 'flip)
+                    (push (make-instance 'wait) (gethash bid bid->cmds))
+                    (push cmd (gethash bid bid->cmds))))
+           (loop :for bid :from 1 :to n :do
+                (unless (member bid (mapcar #'bot-bid (state-bots state)))
+                  (push :none (gethash bid bid->cmds))))
+           (src/execution:execute-one-step state gs))
+
+      (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
+           (let ((lst (gethash bid bid->cmds)))
+             (if (every (lambda (c) (eq c :none)) lst)
+                 (remhash bid bid->cmds)
+                 (setf (gethash bid bid->cmds) (reverse lst)))))
+      ;; (format t "flips: ~A~%" flip-steps)
+      ;; now we have commands matrix
+      ;; lets put flips and waits in appropriate places
+      ;; number of commands (and :none-s) in table should be the same for every bid
+      (loop
+         :for (i . new-harmonics) :in (reverse flip-steps)
+         :for j :from 0 ;; number of flips
+         :do
+           (let ((flipped? nil))
+             (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
+                  (let* ((lst (gethash bid bid->cmds))
+                         (index (if (eq new-harmonics :low)
+                                    (+ i j +1)
+                                    (+ i j -1)))
+                         (cmd (if (eq (nth (1- index) lst) :none)
+                                  :none
+                                  (if flipped?
+                                      (make-instance 'wait)
+                                      (progn (setf flipped? t)
+                                             (make-instance 'flip))))))
+                    (setf (gethash bid bid->cmds)
+                          (append (take index lst)
+                                  (list cmd)
+                                  (nthcdr index lst)))
+                    ))))
+      ;; now compute count-list
+      (let ((count-list nil)
+            (k (length (gethash 1 bid->cmds))))
+        (loop :for i :from 0 :below k :do
+             (let ((count 0))
+               (mapc (lambda (lst) (unless (eq (nth i lst) :none)
+                                (incf count)))
+                     (alexandria:hash-table-values bid->cmds))
+               (push count count-list)))
+        ;; remove :none-s from lists
+        (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
+             (setf (gethash bid bid->cmds)
+                   (remove :none (gethash bid bid->cmds))))
+        ;; (maphash (lambda (bid lst) (format t "bid ~A lst ~A~%" bid (length lst)))
+        ;;         bid->cmds)
+        ;; (format t "count-list: ~A~%" (reverse count-list))
+        ;; finally, sort new commands sequence and return it
+        (sort-commands-for-bots bid->cmds (reverse count-list))
+        ))))
+
+(defmethod generate-trace ((tracer (eql :trivial-parallel-low)) (task-type (eql :assembly)) src model)
+  (let ((commands (generate-trace :trivial-parallel :assembly nil model)))
+    (introduce-flips model commands)))
+
 (defmethod generate-trace ((tracer (eql :trivial-parallel)) task-type src-model model)
   (let* ((target-state (src/model:make-pseudo-state-from-model model))
          (r (model-resolution model))
@@ -170,8 +269,8 @@
          (commands nil)
          (clusters (get-clusters target-state)))
 
-    (when (eq (state-harmonics state) :low)
-      (push (make-instance 'flip) commands))
+    ;; (when (eq (state-harmonics state) :low)
+    ;;   (push (make-instance 'flip) commands))
 
     (let* ((regions
             (loop :for cluster :in (alexandria:hash-table-keys clusters)
@@ -201,8 +300,9 @@
                  (region-points r)))
       ;; (format t "bot-positions: ~A~%" bots-positions)
       (setf commands
-            (reverse (cons (make-instance 'flip)
-                           (primitive-spawn bot bots-positions :n (1- (hash-table-count clusters))))))
+            (reverse ;; (cons (make-instance 'flip)
+             ;;       )
+             (primitive-spawn bot bots-positions :n (1- (hash-table-count clusters)))))
 
       ;; then move them to the regions start
 
@@ -216,13 +316,14 @@
            :do (loop :for move :in (moves-in-clear-space bot1-pos (car reg))
                   :do (push move (gethash bid init-pos))))
 
-        (loop :for move :in (moves-in-clear-space #(0 0 0) (car (first regions)))
+        (loop :for move :in (append (moves-in-clear-space #(0 0 0) (car (first regions)))
+                                    ;; flip after positioning
+                                    (list (make-instance 'flip)))
            :do (loop :for bid :in bids :do
                     (if (= bid (bot-bid bot))
                         (push move (gethash bid init-pos))
                         (push (make-instance 'wait) (gethash bid init-pos)))))
 
-        
         (loop :for cmd :in (sort-commands-for-bots
                             init-pos
                             (constant-count-list-from-bid->cmds init-pos))
@@ -252,74 +353,170 @@
              (setf (gethash bid bid->cmds) (remove-if (lambda (c) (typep c 'flip)) bot-commands))
              (setf (gethash bid bid->pos) new-bot-pos)))
 
+      
+      
+      ;; move all bots to top #(x R-1 z)
+      (loop :for bid :in bids :do
+           (with-coordinates (x y z)
+             (gethash bid bid->pos)
+             (setf (gethash bid bid->cmds)
+                   (append (gethash bid bid->cmds)
+                           (moves-in-clear-space
+                            (make-point x y z)
+                            (make-point x (1- r) z))))
+             (setf (gethash bid bid->pos)
+                   (make-point x (1- r) z))))
+
       (setf commands (append (reverse commands)
                              (sort-commands-for-bots
                               bid->cmds
                               (constant-count-list-from-bid->cmds bid->cmds))))
-      ;; at this point all bots have finished construction and now are waiting
+      ;; at this point all bots have finished construction
+      ;; moved to #(x R-1 z) point of their region
+      ;; and now are waiting
 
 
-      ;; now fuse them one by one
-      (let* ((r (state-r state))
-             (bid->cmds (make-hash-table :test #'eq))
-             (count-list nil)
-             (bid0 (find (bot-bid bot) bids))
-             (bids (remove bid0 bids)))
-        (format t "bids = ~A~%" bids)
+      ;; fusion
+      ;; look for first bot without interference, move to it and fuse
+      (let ((r (state-r state))
+            (bid->cmds (make-hash-table :test #'eq))
+            (count-list nil))
+
         ;; flip harmonics to low
-        (push (make-instance 'flip) (gethash bid0 bid->cmds))
-        (loop :for bid :in bids :do
+        (setf (gethash (first bids) bid->cmds) (list (make-instance 'flip)))
+        (loop :for bid :in (cdr bids) :do
              (push (make-instance 'wait) (gethash bid bid->cmds)))
-        (push (1+ (length bids)) count-list)
-        ;; move first bot to #(0 R-1 0)
-        (with-coordinates (x y z)
-          (gethash bid0 bid->pos)
-          (loop :for m :in (append (moves-in-clear-space
-                                    (make-point x y z)
-                                    (make-point x (1- r) z))
-                                   (moves-in-clear-space
-                                    (make-point x (1- r) z)
-                                    (make-point 0 (1- r) 0))) :do
+        (push (length bids) count-list)
+
+        (loop :while (cdr bids) :do
+             (let* ((bid0 (pop bids)))
+               (destructuring-bind (bid1 nd)
+                   (block search
+                     (loop :for nd :in (list (make-point 1 0 0)
+                                             (make-point 0 0 1)
+                                             (make-point -1 0 0)
+                                             (make-point 0 0 -1))
+                        :do (loop :for bid1 :in bids :do
+                                 (when (inside-field? (pos-add nd (gethash bid1 bid->pos)) r)
+                                   (let ((others (copy-list bids)))
+                                     (unless (some (lambda (bid)
+                                                     (in-region (gethash bid bid->pos)
+                                                                (cons (gethash bid0 bid->pos)
+                                                                      (pos-add nd (gethash bid1 bid->pos)))))
+                                                   others)
+                                       ;; it's clear, return bid1
+                                       (return-from search (list bid1 nd))))))))
+                 (assert bid1)
+                 ;; move bot0 to bot1 and fuse
+                 (with-coordinates (x0 y0 z0)
+                   (gethash bid0 bid->pos)
+                   (with-coordinates (x1 y1 z1)
+                     (pos-add nd (gethash bid1 bid->pos))
+                     ;; move
+                     (loop
+                        :for m :in (moves-in-clear-space (make-point x0 y0 z0)
+                                                         (make-point x1 y1 z1)) :do
+                          (push m (gethash bid0 bid->cmds))
+                          (loop :for bid :in bids :do
+                               (push (make-instance 'wait) (gethash bid bid->cmds)))
+                          (push (1+ (length bids)) count-list))
+                     ;; finally fuse, bot1 is primary
+                     (push (make-instance 'fusionp :nd nd)
+                           (gethash bid1 bid->cmds))
+                     (push (make-instance 'fusions
+                                          :nd (with-coordinates (dx dy dz) nd
+                                                                (make-point (* -1 dx) (* -1 dy) (* -1 dz))))
+                           (gethash bid0 bid->cmds))
+                     (loop :for bid :in (remove bid1 (copy-list bids)) :do
+                          (push (make-instance 'wait) (gethash bid bid->cmds)))
+                     (push (1+ (length bids)) count-list))))))
+
+        ;; move last bot to #(0 0 0) and halt
+        (let ((bid0 (first bids)))
+          (loop :for m :in (append
+                            (moves-in-clear-space (gethash bid0 bid->pos)
+                                                  (make-point 0 (1- r) 0))
+                            (moves-in-clear-space (make-point 0 (1- r) 0)
+                                                  (make-point 0 0 0))) :do
                (push m (gethash bid0 bid->cmds))
-               (loop :for bid :in bids :do
-                    (push (make-instance 'wait) (gethash bid bid->cmds)))
-               (push (1+ (length bids)) count-list)))
-        ;; then move each bot to #(0 R-1 1) and fuse
-        (loop :while bids :do
-             (let ((bid1 (pop bids)))
-               (with-coordinates (x y z)
-                 (gethash bid1 bid->pos)
-                 ;; move to #(x R-1 z) and to #(0 R-1 1)
-                 (loop :for m :in (append (moves-in-clear-space
-                                           (make-point x y z)
-                                           (make-point x (1- r) z))
-                                          (moves-in-clear-space
-                                           (make-point x (1- r) z)
-                                           (make-point 0 (1- r) 1))) :do
-                      (push m (gethash bid1 bid->cmds))
-                      (loop :for bid :in (cons bid0 bids) :do
-                           (push (make-instance 'wait) (gethash bid bid->cmds)))
-                      (push (+ (length bids) 2) count-list))
-                 ;; finally fuse
-                 (push (make-instance 'fusionp :nd (make-point 0 0 1))
-                       (gethash bid0 bid->cmds))
-                 (push (make-instance 'fusions :nd (make-point 0 0 -1))
-                       (gethash bid1 bid->cmds))
-                 (loop :for bid :in bids :do
-                      (push (make-instance 'wait) (gethash bid bid->cmds)))
-                 (push (+ (length bids) 2) count-list)
-                 )))
-        ;; move to #(0 0 0) and halt
-        (loop :for m :in (moves-in-clear-space (make-point 0 (1- r) 0)
-                                               (make-point 0 0 0)) :do
-             (push m (gethash bid0 bid->cmds))
-             (push 1 count-list))
-        (push (make-instance 'halt) (gethash bid0 bid->cmds))
-        (push 1 count-list)
-        ;; (format t "fuse count-list: ~A~%" (reverse count-list))
-        (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
-             (setf (gethash bid bid->cmds) (reverse (gethash bid bid->cmds))))
-        (append commands (sort-commands-for-bots bid->cmds (reverse count-list)))))))
+               (push 1 count-list))
+          (push (make-instance 'halt) (gethash bid0 bid->cmds))
+          (push 1 count-list)
+          ;; (format t "fuse count-list: ~A~%" (reverse count-list))
+          (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
+               (setf (gethash bid bid->cmds) (reverse (gethash bid bid->cmds))))
+          (append commands (sort-commands-for-bots bid->cmds (reverse count-list))))
+
+        )
+
+
+      ;; start of first version of fusion
+      ;; now fuse them one by one
+
+      ;; (let* ((r (state-r state))
+      ;;        (bid->cmds (make-hash-table :test #'eq))
+      ;;        (count-list nil)
+      ;;        (bid0 (find (bot-bid bot) bids))
+      ;;        (bids (remove bid0 bids)))
+      ;;   (format t "bids = ~A~%" bids)
+      ;;   ;; flip harmonics to low
+      ;;   (push (make-instance 'flip) (gethash bid0 bid->cmds))
+      ;;   (loop :for bid :in bids :do
+      ;;        (push (make-instance 'wait) (gethash bid bid->cmds)))
+      ;;   (push (1+ (length bids)) count-list)
+      ;;   ;; move first bot to #(0 R-1 0)
+      ;;   (with-coordinates (x y z)
+      ;;     (gethash bid0 bid->pos)
+      ;;     (loop :for m :in (append (moves-in-clear-space
+      ;;                               (make-point x y z)
+      ;;                               (make-point x (1- r) z))
+      ;;                              (moves-in-clear-space
+      ;;                               (make-point x (1- r) z)
+      ;;                               (make-point 0 (1- r) 0))) :do
+      ;;          (push m (gethash bid0 bid->cmds))
+      ;;          (loop :for bid :in bids :do
+      ;;               (push (make-instance 'wait) (gethash bid bid->cmds)))
+      ;;          (push (1+ (length bids)) count-list))
+      ;;     )
+      ;;   ;; then move each bot to #(0 R-1 1) and fuse
+      ;;   (loop :while bids :do
+      ;;        (let ((bid1 (pop bids)))
+      ;;          (with-coordinates (x y z)
+      ;;            (gethash bid1 bid->pos)
+      ;;            ;; move to #(x R-1 z) and to #(0 R-1 1)
+      ;;            (loop :for m :in (append (moves-in-clear-space
+      ;;                                      (make-point x y z)
+      ;;                                      (make-point x (1- r) z))
+      ;;                                     (moves-in-clear-space
+      ;;                                      (make-point x (1- r) z)
+      ;;                                      (make-point 0 (1- r) 1))) :do
+      ;;                 (push m (gethash bid1 bid->cmds))
+      ;;                 (loop :for bid :in (cons bid0 bids) :do
+      ;;                      (push (make-instance 'wait) (gethash bid bid->cmds)))
+      ;;                 (push (+ (length bids) 2) count-list))
+      ;;            ;; finally fuse
+      ;;            (push (make-instance 'fusionp :nd (make-point 0 0 1))
+      ;;                  (gethash bid0 bid->cmds))
+      ;;            (push (make-instance 'fusions :nd (make-point 0 0 -1))
+      ;;                  (gethash bid1 bid->cmds))
+      ;;            (loop :for bid :in bids :do
+      ;;                 (push (make-instance 'wait) (gethash bid bid->cmds)))
+      ;;            (push (+ (length bids) 2) count-list)
+      ;;            )))
+      ;;   ;; move to #(0 0 0) and halt
+      ;;   (loop :for m :in (moves-in-clear-space (make-point 0 (1- r) 0)
+      ;;                                          (make-point 0 0 0)) :do
+      ;;        (push m (gethash bid0 bid->cmds))
+      ;;        (push 1 count-list))
+      ;;   (push (make-instance 'halt) (gethash bid0 bid->cmds))
+      ;;   (push 1 count-list)
+      ;;   ;; (format t "fuse count-list: ~A~%" (reverse count-list))
+      ;;   (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
+      ;;        (setf (gethash bid bid->cmds) (reverse (gethash bid bid->cmds))))
+      ;;   (append commands (sort-commands-for-bots bid->cmds (reverse count-list)))
+
+      ;;   )
+      )))
 
 (defun generate-trivial-trace-for-region (state gs target-state region &key (use-gs nil))
   "Assumes bot to be already in c1 of `region' and state with :high `harmonics'"
@@ -413,7 +610,7 @@
 
 (defun trivial-tracer (in-file out-file)
   (let* ((model (read-model-from-file in-file))
-         (commands (generate-trace :trivial-parallel :assembly nil model)))
+         (commands (generate-trace :trivial-parallel-low :assembly nil model)))
     (with-open-file (stream out-file
                             :direction :output
                             :if-exists :supersede
