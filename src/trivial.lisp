@@ -152,6 +152,105 @@
          (count-list (make-list steps :initial-element (hash-table-count bid->cmds))))
     count-list))
 
+(defun introduce-flips (model commands)
+  (let* ((r (model-resolution model))
+         (n 40)
+	     (bot (make-instance 'nanobot
+				             :bid 1
+				             :pos #(0 0 0)
+				             :seeds (loop :for i :from 2 :to n :collect i)))
+	     (state (make-state :r r
+			                :harmonics :low
+			                :matrix (make-array (* r r r)
+						                        :element-type 'bit
+						                        :initial-element 0)
+			                :bots (list bot)
+			                :trace commands))
+         (gs (make-instance 'grounded-state)))
+
+    (let ((bid->cmds (make-hash-table :test #'eq))
+          (was-grounded? (eq (state-harmonics state) :low))
+          (flip-steps nil))
+      ;; run the simulation and see, on which steps flip is appropriate/necessary
+      (loop :for i :from 0
+         :while (state-bots state) :do
+           (let* (;; (well-formed? (src/execution::well-formed? state gs))
+                  (is-grounded? (grounded-check gs)
+                    ;; (and well-formed?
+                    ;;      (eq (state-harmonics state) :low))
+                    ))
+             ;; (assert well-formed?)
+             (unless (eq was-grounded? is-grounded?)
+               (push (cons i (if is-grounded? :low :high))
+                     flip-steps))
+             (setf was-grounded? is-grounded?))
+         ;; also fill `bid->cmds' table to generate new commands sequence later
+           (loop
+              :for bid :in (sort (mapcar #'bot-bid (state-bots state)) #'<)
+              :for cmd :in (take (length (state-bots state)) (state-trace state))
+              :do ;; replace present flips with waits
+                (if (typep cmd 'flip)
+                    (push (make-instance 'wait) (gethash bid bid->cmds))
+                    (push cmd (gethash bid bid->cmds))))
+           (loop :for bid :from 1 :to n :do
+                (unless (member bid (mapcar #'bot-bid (state-bots state)))
+                  (push :none (gethash bid bid->cmds))))
+           (src/execution:execute-one-step state gs))
+
+      (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
+           (let ((lst (gethash bid bid->cmds)))
+             (if (every (lambda (c) (eq c :none)) lst)
+                 (remhash bid bid->cmds)
+                 (setf (gethash bid bid->cmds) (reverse lst)))))
+      (format t "flips: ~A~%" flip-steps)
+      ;; now we have commands matrix
+      ;; lets put flips and waits in appropriate places
+      ;; number of commands (and :none-s) in table should be the same for every bid
+      (loop
+         :for (i . new-harmonics) :in (reverse flip-steps)
+         :for j :from 0 ;; number of flips
+         :do
+           (let ((flipped? nil))
+             (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
+                  (let* ((lst (gethash bid bid->cmds))
+                         (index (if (eq new-harmonics :low)
+                                    (+ i j +1)
+                                    (+ i j -1)))
+                         (cmd (if (eq (nth (1- index) lst) :none)
+                                  :none
+                                  (if flipped?
+                                      (make-instance 'wait)
+                                      (progn (setf flipped? t)
+                                             (make-instance 'flip))))))
+                    (setf (gethash bid bid->cmds)
+                          (append (take index lst)
+                                  (list cmd)
+                                  (nthcdr index lst)))
+                    ))))
+      ;; now compute count-list
+      (let ((count-list nil)
+            (k (length (gethash 1 bid->cmds))))
+        (loop :for i :from 0 :below k :do
+             (let ((count 0))
+               (mapc (lambda (lst) (unless (eq (nth i lst) :none)
+                                (incf count)))
+                     (alexandria:hash-table-values bid->cmds))
+               (push count count-list)))
+        ;; remove :none-s from lists
+        (loop :for bid :in (alexandria:hash-table-keys bid->cmds) :do
+             (setf (gethash bid bid->cmds)
+                   (remove :none (gethash bid bid->cmds))))
+        ;; (maphash (lambda (bid lst) (format t "bid ~A lst ~A~%" bid (length lst)))
+        ;;         bid->cmds)
+        (format t "count-list: ~A~%" (reverse count-list))
+        ;; finally, sort new commands sequence and return it
+        (sort-commands-for-bots bid->cmds (reverse count-list))
+        ))))
+
+(defmethod generate-trace ((tracer (eql :trivial-parallel-low)) (task-type (eql :assembly)) src model)
+  (let ((commands (generate-trace :trivial-parallel :assembly nil model)))
+    (introduce-flips model commands)))
+
 (defmethod generate-trace ((tracer (eql :trivial-parallel)) task-type src-model model)
   (let* ((target-state (src/model:make-pseudo-state-from-model model))
          (r (model-resolution model))
@@ -511,7 +610,7 @@
 
 (defun trivial-tracer (in-file out-file)
   (let* ((model (read-model-from-file in-file))
-         (commands (generate-trace :trivial-parallel :assembly nil model)))
+         (commands (generate-trace :trivial-parallel-low :assembly nil model)))
     (with-open-file (stream out-file
                             :direction :output
                             :if-exists :supersede

@@ -146,7 +146,7 @@
               (generate-trace-for-model :reassembly src-file tgt-file :trivial-low)
               (if src-file
                   (generate-trace-for-model :disassembly src-file nil :trivial-low)
-                  (generate-trace-for-model :assembly nil tgt-file :trivial-low)))))
+                  (generate-trace-for-model :assembly nil tgt-file :trivial-parallel-low)))))
     (error (e) nil)))
 
 (defun get-best-traces ()
