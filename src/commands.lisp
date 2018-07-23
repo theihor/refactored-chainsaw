@@ -596,24 +596,37 @@
    and a list of counts of active bids at avery timestep"
   (let ((bids (sort (alexandria:hash-table-keys bid->cmds) #'<))
         (commands nil))
+    
     (labels ((%print ()
                (format t "~%tab:~%")
                (maphash (lambda (bid cmds)
                           (format t "~A: ~A~%" bid cmds))
                         bid->cmds))
-             (%sort-cmd (bids)
-               (loop :for bid :in bids :do
+             (%sort-cmd (bids1)
+               (loop :for bid :in (copy-list bids1) :do
                     (let ((cmd (pop (gethash bid bid->cmds))))
+                      (when (and cmd
+                                 (null (gethash bid bid->cmds))
+                                 (typep cmd 'fusions))
+                        (setf bids (remove bid bids)))
                       (unless (gethash bid bid->cmds)
                         (remhash bid bid->cmds))
                       (if cmd
                           (push cmd commands)
                           (push (make-instance 'wait) commands))))))
+      ;; (%print)
 
       (loop
          :for n :in count-list
          :until (= (hash-table-count bid->cmds) 0) :do
-           (%sort-cmd (take n bids))))
+           (%sort-cmd (take n bids)))
+
+      (unless (= (hash-table-count bid->cmds) 0)
+        (%print)
+        (error "Number of commands in table doesn't match count-list"))
+      
+      )
+    
 
     (reverse commands)))
 
