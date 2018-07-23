@@ -130,7 +130,9 @@
   (let* ((region (compute-model-bounding-box state))
          (c1 (car region))
          (c2 (cdr region))
-         (pd (pos-diff c2 c1)))
+         (pd (pos-diff c2 c1))
+         (state-r (state-r state))
+         (max (1- state-r)))
     (with-coordinates (x1 y1 z1) c1
       (with-coordinates (x2 y2 z2) c2
         (with-coordinates (bdx bdy bdz) pd
@@ -146,8 +148,8 @@
                  (clusters-ht (make-hash-table :test #'equalp)))
             (loop :for x :from x1 :to x2 :by r
                :do (loop :for z :from z1 :to z2 :by r
-                      :do (let* ((dx (1- (+ x r)))
-                                 (dz (1- (+ z r)))
+                      :do (let* ((dx (min (1- (+ x r)) max))
+                                 (dz (min (1- (+ z r)) max))
                                  (cluster (make-region (make-point x 0 z)
                                                        (make-point dx 0 dz)))
                                  (voxels 0))
