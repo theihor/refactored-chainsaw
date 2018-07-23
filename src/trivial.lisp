@@ -299,7 +299,7 @@
                                              (make-point 0 0 -1))
                         :do (loop :for bid1 :in bids :do
                                  (when (inside-field? (pos-add nd (gethash bid1 bid->pos)) r)
-                                   (let ((others (remove bid1 (copy-list bids))))
+                                   (let ((others (copy-list bids)))
                                      (unless (some (lambda (bid)
                                                      (in-region (gethash bid bid->pos)
                                                                 (cons (gethash bid0 bid->pos)
