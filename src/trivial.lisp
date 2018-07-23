@@ -290,41 +290,47 @@
         (push (length bids) count-list)
 
         (loop :while (cdr bids) :do
-             (let* ((bid0 (pop bids))
-                    (nd (make-point 1 0 0))
-                    (bid1 (loop :for bid1 :in bids :do
-                               (let ((others (remove bid1 (copy-list bids))))
-                                 (unless (some (lambda (bid)
-                                                 (in-region (gethash bid bid->pos)
-                                                            (cons (gethash bid0 bid->pos)
-                                                                  (pos-add nd (gethash bid1 bid->pos)))))
-                                               others)
-                                   ;; it's clear, return bid1
-                                   (return bid1))))))
-               (assert bid1)
-               ;; move bot0 to bot1 and fuse
-               (with-coordinates (x0 y0 z0)
-                 (gethash bid0 bid->pos)
-                 (with-coordinates (x1 y1 z1)
-                   (pos-add nd (gethash bid1 bid->pos))
-                   ;; move
-                   (loop
-                      :for m :in (moves-in-clear-space (make-point x0 y0 z0)
-                                                       (make-point x1 y1 z1)) :do
-                        (push m (gethash bid0 bid->cmds))
-                        (loop :for bid :in bids :do
-                             (push (make-instance 'wait) (gethash bid bid->cmds)))
-                        (push (1+ (length bids)) count-list))
-                   ;; finally fuse, bot1 is primary
-                   (push (make-instance 'fusionp :nd nd)
-                         (gethash bid1 bid->cmds))
-                   (push (make-instance 'fusions
-                                        :nd (with-coordinates (dx dy dz) nd
-                                                              (make-point (* -1 dx) (* -1 dy) (* -1 dz))))
-                         (gethash bid0 bid->cmds))
-                   (loop :for bid :in (remove bid1 (copy-list bids)) :do
-                        (push (make-instance 'wait) (gethash bid bid->cmds)))
-                   (push (1+ (length bids)) count-list)))))
+             (let* ((bid0 (pop bids)))
+               (destructuring-bind (bid1 nd)
+                   (block search
+                     (loop :for nd :in (list (make-point 1 0 0)
+                                             (make-point 0 0 1)
+                                             (make-point -1 0 0)
+                                             (make-point 0 0 -1))
+                        :do (loop :for bid1 :in bids :do
+                                 (when (inside-field? (pos-add nd (gethash bid1 bid->pos)) r)
+                                   (let ((others (remove bid1 (copy-list bids))))
+                                     (unless (some (lambda (bid)
+                                                     (in-region (gethash bid bid->pos)
+                                                                (cons (gethash bid0 bid->pos)
+                                                                      (pos-add nd (gethash bid1 bid->pos)))))
+                                                   others)
+                                       ;; it's clear, return bid1
+                                       (return-from search (list bid1 nd))))))))
+                 (assert bid1)
+                 ;; move bot0 to bot1 and fuse
+                 (with-coordinates (x0 y0 z0)
+                   (gethash bid0 bid->pos)
+                   (with-coordinates (x1 y1 z1)
+                     (pos-add nd (gethash bid1 bid->pos))
+                     ;; move
+                     (loop
+                        :for m :in (moves-in-clear-space (make-point x0 y0 z0)
+                                                         (make-point x1 y1 z1)) :do
+                          (push m (gethash bid0 bid->cmds))
+                          (loop :for bid :in bids :do
+                               (push (make-instance 'wait) (gethash bid bid->cmds)))
+                          (push (1+ (length bids)) count-list))
+                     ;; finally fuse, bot1 is primary
+                     (push (make-instance 'fusionp :nd nd)
+                           (gethash bid1 bid->cmds))
+                     (push (make-instance 'fusions
+                                          :nd (with-coordinates (dx dy dz) nd
+                                                                (make-point (* -1 dx) (* -1 dy) (* -1 dz))))
+                           (gethash bid0 bid->cmds))
+                     (loop :for bid :in (remove bid1 (copy-list bids)) :do
+                          (push (make-instance 'wait) (gethash bid bid->cmds)))
+                     (push (1+ (length bids)) count-list))))))
 
         ;; move last bot to #(0 0 0) and halt
         (let ((bid0 (first bids)))
