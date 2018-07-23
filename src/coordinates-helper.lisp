@@ -136,29 +136,33 @@
     (with-coordinates (x1 y1 z1) c1
       (with-coordinates (x2 y2 z2) c2
         (with-coordinates (bdx bdy bdz) pd
-          (let* ((area (* bdx bdz))
-                 (cluster-size (if (> area *bot-number*)
-                                   (ceiling (/ area *bot-number*))
-                                   1))
-                 (r (ceiling (sqrt cluster-size)))
-                 ;; (x-cl (ceiling (/ bdx r)))
-                 ;; (z-cl (ceiling (/ bdz r)))
-                 ;; (cluster-number (* x-cl z-cl))
-                 (total-voxels 0)
-                 (clusters-ht (make-hash-table :test #'equalp)))
-            (loop :for x :from x1 :to x2 :by r
-               :do (loop :for z :from z1 :to z2 :by r
-                      :do (let* ((dx (min (1- (+ x r)) max))
-                                 (dz (min (1- (+ z r)) max))
-                                 (cluster (make-region (make-point x 0 z)
-                                                       (make-point dx 0 dz)))
-                                 (voxels 0))
-                            (loop :for y :from y1 :to y2
-                               :do (loop :for xi :from x :to dx
-                                      :do (loop :for zi :from z :to dz
-                                             :do (when (voxel-full? state (make-point xi y zi))
-                                                   (incf voxels)
-                                                   (incf total-voxels)))))
-                            (when (> voxels 0)
-                              (setf (gethash cluster clusters-ht) voxels)))))
-            clusters-ht))))))
+          (labels ((%get-clusters (mult)
+                     (let* ((area (* bdx bdz mult))
+                            (cluster-size (if (> area *bot-number*)
+                                              (ceiling (/ area *bot-number*))
+                                              1))
+                            (r (ceiling (sqrt cluster-size)))
+                            ;; (x-cl (ceiling (/ bdx r)))
+                            ;; (z-cl (ceiling (/ bdz r)))
+                            ;; (cluster-number (* x-cl z-cl))
+                            (total-voxels 0)
+                            (clusters-ht (make-hash-table :test #'equalp)))
+                       (loop :for x :from x1 :to x2 :by r
+                          :do (loop :for z :from z1 :to z2 :by r
+                                 :do (let* ((dx (min (1- (+ x r)) max))
+                                            (dz (min (1- (+ z r)) max))
+                                            (cluster (make-region (make-point x 0 z)
+                                                                  (make-point dx 0 dz)))
+                                            (voxels 0))
+                                       (loop :for y :from y1 :to y2
+                                          :do (loop :for xi :from x :to dx
+                                                 :do (loop :for zi :from z :to dz
+                                                        :do (when (voxel-full? state (make-point xi y zi))
+                                                              (incf voxels)
+                                                              (incf total-voxels)))))
+                                       (when (> voxels 0)
+                                         (setf (gethash cluster clusters-ht) voxels)))))
+                       (if (<= (hash-table-count clusters-ht) *bot-number*)
+                           clusters-ht
+                           (%get-clusters (* mult 1.1))))))
+            (%get-clusters 1)))))))
