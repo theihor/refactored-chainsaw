@@ -139,17 +139,17 @@
                                    (ceiling (/ area *bot-number*))
                                    1))
                  (r (ceiling (sqrt cluster-size)))
-                 (x-cl (ceiling (/ dx r)))
-                 (z-cl (ceiling (/ dz r)))
-                 (cluster-number (* x-cl z-cl))
+                 ;; (x-cl (ceiling (/ dx r)))
+                 ;; (z-cl (ceiling (/ dz r)))
+                 ;; (cluster-number (* x-cl z-cl))
                  (total-voxels 0)
                  (clusters-ht (make-hash-table :test #'equalp)))
             (loop :for x :from x1 :to x2 :by r
                :do (loop :for z :from z1 :to z2 :by r
                       :do (let ((cluster (make-region (make-point x 0 z)
-                                                      (make-point (+ x r) 0 (+ z r))))
+                                                      (make-point (1- (+ x r)) 0 (1- (+ z r)))))
                                 (voxels 0))
-                            (loop :for y :from y1 :to z1
+                            (loop :for y :from y1 :to y2
                                :do (when (voxel-full? state (make-point x y z))
                                      (incf voxels)
                                      (incf total-voxels)))

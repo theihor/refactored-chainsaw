@@ -170,8 +170,8 @@
          (commands nil)
          (clusters (get-clusters target-state)))
 
-    ;; (when (eq (state-harmonics state) :low)
-    ;;   (push (make-instance 'flip) commands))
+    (when (eq (state-harmonics state) :low)
+      (push (make-instance 'flip) commands))
 
     ;; first, let's spawn all bots
     (let* ((regions
@@ -192,9 +192,15 @@
            (bid->cmds (make-hash-table :test #'eq))
            (bid->pos (make-hash-table :test #'eq)))
       ;; (format t "regions: ~A~%" regions)
+      (loop :for (r . rest) :on regions :do
+           (some (lambda (p) (loop :for r1 :in rest :do
+                             (when (in-region p r1)
+                               (error "Regions collide ~A and ~A" r r1))))
+                 (region-points r)))
       ;; (format t "bot-positions: ~A~%" bots-positions)
       (setf commands
-            (reverse (primitive-spawn bot bots-positions :n (1- (hash-table-count clusters)))))
+            (reverse (cons (make-instance 'flip)
+                           (primitive-spawn bot bots-positions :n (1- (hash-table-count clusters))))))
 
       (let ((init-pos (make-hash-table :test #'eq)))
 
@@ -206,12 +212,13 @@
            :do (loop :for move :in (moves-in-clear-space bot1-pos (car reg))
                   :do (push move (gethash bid init-pos))))
 
-        (loop :for move :in (moves-in-clear-space #(0 0 0) (print (car (first regions))))
+        (loop :for move :in (moves-in-clear-space #(0 0 0) (car (first regions)))
            :do (loop :for bid :in bids :do
                     (if (= bid (bot-bid bot))
                         (push move (gethash bid init-pos))
                         (push (make-instance 'wait) (gethash bid init-pos)))))
 
+        
         (loop :for cmd :in (sort-commands-for-bots
                             init-pos
                             (constant-count-list-from-bid->cmds init-pos))
@@ -226,23 +233,18 @@
       ;;                         :element-type '(unsigned-byte 8))
       ;;   (write-sequence (encode-commands (state-trace state)) stream))
       ;; (break)
-      (loop :while (state-trace state) :do
-           (src/execution:execute-one-step state gs))
+      ;; (loop :while (state-trace state) :do
+      ;;      (src/execution:execute-one-step state gs))
       (setf (state-bots state) (list bot))
       (loop :for region :in regions
          :for bid :in bids
          :do
+           
            (setf (bot-pos bot) (car region))
            (multiple-value-bind (bot-commands new-bot-pos)
                (generate-trivial-trace-for-region
                 state gs target-state region :use-gs t)
-             ;; (loop :for m :in moves-and-fills
-             ;;    ;; (moves-in-clear-space
-             ;;    ;;  bot-pos (make-point 0 (aref bot-pos 1) 0))
-             ;;    ;; (moves-in-clear-space
-             ;;    ;;  (make-point 0 (aref bot-pos 1) 0) #(0 0 0))
-             ;;    :do (push m bot-commands))
-             (setf (gethash bid bid->cmds) bot-commands)
+             (setf (gethash bid bid->cmds) (remove-if (lambda (c) (typep c 'flip)) bot-commands))
              (setf (gethash bid bid->pos) new-bot-pos)))
       (append (reverse commands)
               (sort-commands-for-bots

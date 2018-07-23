@@ -613,7 +613,14 @@
       (loop
          :for n :in count-list
          :until (= (hash-table-count bid->cmds) 0) :do
-           (%sort-cmd (take n bids))))
+           (%sort-cmd (take n bids)))
+
+      (unless (= (hash-table-count bid->cmds) 0)
+        (%print)
+        (error "Number of commands in table doesn't match count-list"))
+      
+      )
+    
 
     (reverse commands)))
 

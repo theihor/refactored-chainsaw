@@ -34,7 +34,7 @@
                                          (if (oddp i) #(1 0 0) #(0 0 1))))
                 (proxy (with-coordinates (x y z) bot1-pos
                                          (with-coordinates (x0 y0 z0) bot1-start-pos
-                                           (make-point x0 y z0))))
+                                                           (make-point x0 y z0))))
                 (moves (append (moves-in-clear-space bot1-start-pos proxy)
                                (moves-in-clear-space proxy bot1-pos))
                   ))
@@ -47,15 +47,22 @@
       (loop :for (bid . cmd) :in cmd-alist :do
            (push cmd (gethash bid bot->cmds)))
 
-      (let* ((steps (apply #'max
-                           (mapcar #'length
-                                   (alexandria:hash-table-values bot->cmds))))
-             (init-count-lst (loop :for i :from 1 :to (1+ n) :collect i))
+      ;; (maphash (lambda (bid cmds) (format t "cmds of ~A: ~A~%" bid cmds))
+      ;;          bot->cmds)
+
+      (let* ((steps (let ((max-len n))
+                      (loop :for bid :in (sort (copy-list (take n (bot-seeds bot))) #'<)
+                         :for i :from 1
+                         :do (setf max-len (max (+ i (length (gethash bid bot->cmds)))
+                                                max-len)))
+                      max-len))
+             (init-count-lst (loop :for i :from 1 :to n :collect i))
              (count-list (append init-count-lst
-                                 (if (> steps (1+ n))
-                                     (make-list (- steps (1+ n))
+                                 (if (> steps n)
+                                     (make-list (- steps n)
                                                 :initial-element (1+ n))
                                      nil))))
+        (format t "steps = ~A; count-list: ~A~%" steps count-list)
         (sort-commands-for-bots bot->cmds count-list)))))
 
 ;; (defun spawn-in-line (bot region &key (n :all) (commands-acc nil) (spawned))
